@@ -15,11 +15,12 @@ recording = False
 running = True
 
 def on_press(key):
-    global chars, running
+    global chars, running, time_since_start
     print(chars, end='\r')
     chars += 1
     with open('keylog.txt', 'a') as f:
-        f.write(f'{time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())[:-3]}: {key}\n')
+        timestamp = int((time.time() - time_since_start)*1000) # milliseconds since the script was started (about)
+        f.write(f'{timestamp}: {key}\n')
 
 def record_audio():
     global recording, running
@@ -98,6 +99,8 @@ root.title("Key Logger")
 
 stop_button = tk.Button(root, text="Stop Logging", command=end)
 stop_button.pack(pady=20)
+
+time_since_start = time.time()
 
 # Start keylogging in a separate thread
 keylogging_thread = threading.Thread(target=start_keylogging, daemon=True)
