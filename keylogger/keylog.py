@@ -4,6 +4,7 @@ import threading
 import tkinter as tk
 import os
 
+# Deletes keylog.txt if it exists
 if os.path.isfile("keylog.txt"):
     os.remove("keylog.txt")
 
