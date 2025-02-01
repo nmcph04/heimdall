@@ -15,12 +15,20 @@ recording = False
 running = True
 
 def on_press(key):
-    global chars, running, time_since_start
+    global chars, time_since_start
     print(chars, end='\r')
     chars += 1
     with open('keylog.txt', 'a') as f:
         timestamp = int((time.time() - time_since_start)*1000) # milliseconds since the script was started (about)
-        f.write(f'{timestamp}: {key}\n')
+        f.write(f'P-{timestamp}: {key}\n')
+
+def on_release(key):
+    global chars, time_since_start
+    print(chars, end='\r')
+    chars += 1
+    with open('keylog.txt', 'a') as f:
+        timestamp = int((time.time() - time_since_start)*1000) # milliseconds since the script was started (about)
+        f.write(f'R-{timestamp}: {key}\n')
 
 def record_audio():
     global recording, running
@@ -88,7 +96,7 @@ chars = 0
 
 # Create a thread for keylogging to run in background
 def start_keylogging():
-    with keyboard.Listener(on_press=on_press) as listener:
+    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         while running:
             time.sleep(0.1)
         listener.stop()
