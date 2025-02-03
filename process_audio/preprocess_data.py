@@ -176,15 +176,15 @@ def preprocess_data(data_dir='data', labeled=True):
     reduced_features, pca = dim_reduction(scaled_features)
     one_hot_labels, ohe = one_hot(labels)
 
+    label_list = (labels, one_hot_labels)
+
     processed_df = pd.DataFrame(reduced_features)
 
-    return processed_df, one_hot_labels, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
+    return processed_df, label_list, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
 
 
 def main():
     df, labels, _ = preprocess_data()
-    print(df)
-    print(labels)
 
 if __name__ == '__main__':
     main()
