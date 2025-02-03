@@ -46,12 +46,12 @@ def read_labels(file_name: str):
         event_key = event_key.lower()
 
         if is_press == '1':
-            key_events.append({'key': event_key, 'start': timestamp, 'end': ''})
+            key_events.append({'key': event_key, 'start': int(timestamp), 'end': ''})
             continue
         if is_press == '0':
             for event in key_events[i:]:
                 if event['key'] == event_key:
-                    event['end'] = timestamp
+                    event['end'] = int(timestamp)
                     i += 1
                     break
 
