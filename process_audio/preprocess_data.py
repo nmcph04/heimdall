@@ -3,7 +3,6 @@ import numpy as np
 from pydub import AudioSegment
 import noisereduce as nr
 import soundfile as sf
-import re
 import os
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
@@ -25,9 +24,7 @@ def reduce_noise(audio, sample_rate, output_file='cleaned.wav'):
     return audio
 
 # Read recorded keystrokes (labels)
-# txt file format: if key was pressed or released (P/R)-milliseconds since start of recording: key
-# example: P-2000: 'c'    c was pressed at 2000ms
-
+# csv format: is pressed (1 for press, 0 for release), timestamp in ms, key
 # For every press, search for the release of the same key, save the key, the start time, and release time - press time
 def read_labels(file_name: str):
     label_file = open(file_name, 'r')
@@ -35,26 +32,23 @@ def read_labels(file_name: str):
     i = 0 # oldest non-released key
     key_events = [] # list of labels and timestamps
 
+    first_line = True
+
     for line in label_file:
+        if first_line:
+            first_line = False
+            continue
+
         line = line.strip()
 
-        # Gets the press or release signal
-        press_or_release = line[0]
-
-        # Gets the event timestamp - regex gets everything between '-' and ':'
-        timestamp = int(re.search(r'-([^:]+):', line).group(1))
-        
-        # Gets the element key - regex gets from ': ' to the end of the line
-        event_key = re.search(r':\s*(.*)$', line).group(1)
-        # Removes '' around characters and the Key. from characters like space, ctrl, etc.
-        event_key = re.sub(r"[']|\bKey\.", '', event_key)
+        is_press, timestamp, event_key = line.split('\t')
 
         event_key = event_key.lower()
 
-        if press_or_release == 'P':
+        if is_press == '1':
             key_events.append({'key': event_key, 'start': timestamp, 'end': ''})
             continue
-        if press_or_release == 'R':
+        if is_press == '0':
             for event in key_events[i:]:
                 if event['key'] == event_key:
                     event['end'] = timestamp
@@ -157,7 +151,7 @@ def preprocess_data(data_dir='data', labeled=True):
     dataframe = pd.DataFrame()
 
     for base in base_names:
-        label_file = data_dir + '/' + base + '.txt'
+        label_file = data_dir + '/' + base + '.tsv'
         audio_file = data_dir + '/' + base + '.wav'
 
         audio, labels, _ = load_data(label_file, audio_file)
@@ -184,7 +178,7 @@ def preprocess_data(data_dir='data', labeled=True):
 
 
 def main():
-    df, labels, _ = preprocess_data()
+    print(read_labels('data/data1.tsv'))
 
 if __name__ == '__main__':
     main()

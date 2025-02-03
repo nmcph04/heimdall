@@ -6,9 +6,15 @@ import os
 import pyaudio
 import wave
 
+TEXT_FILENAME = "keylog.tsv"
+# file format: 
+#   pressed: 1 for press, 0 for release
+#   timestamp: timestamp for event (ms)
+#   key: key associated with event
+
 # Deletes keylog.txt if it exists
-if os.path.isfile("keylog.txt"):
-    os.remove("keylog.txt")
+if os.path.isfile(TEXT_FILENAME):
+    os.remove(TEXT_FILENAME)
 
 # Global variables for controlling the recording process
 recording = False
@@ -18,17 +24,17 @@ def on_press(key):
     global chars, time_since_start
     print(chars, end='\r')
     chars += 1
-    with open('keylog.txt', 'a') as f:
+    with open(TEXT_FILENAME, 'a') as f:
         timestamp = int((time.time() - time_since_start)*1000) # milliseconds since the script was started (about)
-        f.write(f'P-{timestamp}: {key}\n')
+        f.write(f'1\t{timestamp}\t{key}\n')
 
 def on_release(key):
     global chars, time_since_start
     print(chars, end='\r')
     chars += 1
-    with open('keylog.txt', 'a') as f:
+    with open(TEXT_FILENAME, 'a') as f:
         timestamp = int((time.time() - time_since_start)*1000) # milliseconds since the script was started (about)
-        f.write(f'R-{timestamp}: {key}\n')
+        f.write(f'0\t{timestamp}\t{key}\n')
 
 def record_audio():
     global recording, running
@@ -40,7 +46,7 @@ def record_audio():
     CHANNELS = 1              # Number of audio channels
     RATE = 44100              # Sample rate
     CHUNK = 1024              # Buffer size
-    WAVE_OUTPUT_FILENAME = "output.wav"  # Output file name
+    WAVE_OUTPUT_FILENAME = "keylog.wav"  # Output file name
 
     # Initialize PyAudio
     audio = pyaudio.PyAudio()
