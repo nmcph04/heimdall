@@ -4,6 +4,7 @@ from pydub import AudioSegment
 import noisereduce as nr
 import soundfile as sf
 import os
+import re
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import OneHotEncoder
@@ -23,8 +24,45 @@ def reduce_noise(audio, sample_rate, output_file='cleaned.wav'):
     audio = AudioSegment.from_wav(output_file)
     return audio
 
+# Convert shifted characters (!, @, etc.) to unshifted versions (1, 2, etc)
+def map_shifted_keys(key):
+    """
+    Maps a shifted key (e.g., '~', '@') to its unshifted counterpart (e.g., ',', '1').
+    
+    :param key: A string representing the shifted key.
+    :return: The corresponding unshifted character if found; otherwise, returns None.
+    """
+    # Define the mapping from shifted keys to their unshifted counterparts
+    mappings = {
+        '~': '`',   # Tilde and grave accent (backtick)
+        '!': '1',   # Exclamation mark and number 1
+        '@': '2',   # Commercial at and number 2
+        '#': '3',   # Pound sign and number 3
+        '$': '4',   # Dollar sign and number 4
+        '%': '5',   # Percentage symbol and number 5
+        '^': '6',   # Circumflex accent and number 6
+        '&': '7',   # Ampersand and number 7
+        '*': '8',   # Asterisk and number 8
+        '(' : '9',  # Left parenthesis and number 9
+        ')': '0',   # Right parenthesis and number 0
+        '_': '-',   # Underscore and equal sign
+        '+': '=',   # Plus sign and dash/hyphen
+        '{': '[',   # Left curly brace and left square bracket
+        '}': ']',   # Right curly brace and right square bracket
+        '|': '\\',  # Vertical bar and backslash
+        ':': ';',   # Colon and semicolon
+        '"': "'",   # Double quote and single quote
+        '<': ',',   # Less than sign and comma
+        '>': '.',   # Greater than sign and period
+        '?': '/',   # Question mark and forward slash
+    }
+
+    mapped_key = mappings.get(key, key)
+    return mapped_key
+
+
 # Read recorded keystrokes (labels)
-# csv format: is pressed (1 for press, 0 for release), timestamp in ms, key
+# tsv format: is pressed (1 for press, 0 for release), timestamp in ms, key
 # For every press, search for the release of the same key, save the key, the start time, and release time - press time
 def read_labels(file_name: str):
     label_file = open(file_name, 'r')
@@ -33,7 +71,6 @@ def read_labels(file_name: str):
     key_events = [] # list of labels and timestamps
 
     first_line = True
-
     for line in label_file:
         if first_line:
             first_line = False
@@ -41,17 +78,27 @@ def read_labels(file_name: str):
 
         line = line.strip()
 
-        is_press, timestamp, event_key = line.split('\t')
+        is_press, timestamp_str, event_key = line.split('\t')
+        timestamp = int(timestamp_str)
 
+        event_key = re.sub(r'Key\.', '', event_key)
+        event_key = re.sub(r'^\'|\'$', '', event_key)
         event_key = event_key.lower()
 
+        if event_key == '"\'"':
+            event_key = "'"
+
+        event_key = map_shifted_keys(event_key)
+
         if is_press == '1':
-            key_events.append({'key': event_key, 'start': int(timestamp), 'end': ''})
+            key_events.append({'key': event_key, 'start': timestamp, 'end': timestamp + 200})
             continue
         if is_press == '0':
             for event in key_events[i:]:
                 if event['key'] == event_key:
-                    event['end'] = int(timestamp)
+                    # Only sets the end time if the timestamp is less than 200ms after the start time
+                    if timestamp < event['end']:
+                        event['end'] = timestamp
                     i += 1
                     break
 
@@ -124,10 +171,12 @@ def scale_features(data: pd.DataFrame):
     sc = StandardScaler()
     return sc.fit_transform(data), sc
 
-def dim_reduction(data: pd.DataFrame):
-    pca = PCA(n_components=20)
+# Reduce dimensions from >1000 to n_components with PCA
+def dim_reduction(data: pd.DataFrame, n_components=20):
+    pca = PCA(n_components=n_components)
     return pca.fit_transform(data), pca
 
+# One-hot encode labels
 def one_hot(labels):
     labels_reshaped = np.array(labels).reshape(-1, 1)
 
@@ -158,12 +207,12 @@ def preprocess_data(data_dir='data', labeled=True):
         segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio)
 
         key_df = pd.DataFrame(convert_to_array(segmented_audio))
-        key_df.fillna(0, inplace=True)
         key_df['label'] = seg_labels
 
         dataframe = pd.concat([dataframe, key_df], ignore_index=True)
     
     features = dataframe.drop('label', axis=1)
+    features.fillna(0, inplace=True)
     labels = dataframe['label']
 
     scaled_features, scaler = scale_features(features)
@@ -178,7 +227,7 @@ def preprocess_data(data_dir='data', labeled=True):
 
 
 def main():
-    print(read_labels('data/data1.tsv'))
+    df, labels, _ = preprocess_data()
 
 if __name__ == '__main__':
     main()
