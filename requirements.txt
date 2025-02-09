@@ -1,0 +1,15 @@
+pandas
+numpy
+pydub
+noisereduce
+soundfile
+matplotlib
+seaborn
+scikit-learn
+librosa
+imblearn
+pynput
+pyaudio
+wave
+torch
+ipykernel
