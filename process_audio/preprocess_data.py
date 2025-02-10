@@ -1,28 +1,21 @@
 import pandas as pd
 import numpy as np
-from pydub import AudioSegment
 import noisereduce as nr
-import soundfile as sf
 import os
 import re
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import OneHotEncoder
+import librosa
 
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
 
 def load_audio(filename):
-    return sf.read(filename)
+    return librosa.load(filename, sr=None)
 
 def reduce_noise(audio, sample_rate, output_file='cleaned.wav'):
     reduced_noise = nr.reduce_noise(y=audio, sr=sample_rate, prop_decrease=.75)
-
-    # Save the cleaned audio to a new file
-    output_file = "../cleaned_output.wav"
-    sf.write(output_file, reduced_noise, sample_rate)
-
-    audio = AudioSegment.from_wav(output_file)
-    return audio
+    return reduced_noise
 
 # Convert shifted characters (!, @, etc.) to unshifted versions (1, 2, etc)
 def map_shifted_keys(key):
@@ -117,10 +110,11 @@ def load_data(label_file, audio_file="audio.wav"):
     return cleaned_audio, labels, sample_rate
 
 # Segment audio based on labels
-# padding: amount of time before press and after release to include
-def labeled_audio_segmentation(labels, audio, padding=20):
+# ms_pad: amount of time (in ms) before press and after release to include
+def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
     keystrokes = [] # list of segments of audio
     labels_list = [] # list of dicts that contain key pressed, time pressed, time released
+    padding = int(sr * (ms_pad / 1000.))
     for event in labels:
 
         label = event['key']
@@ -139,32 +133,20 @@ def labeled_audio_segmentation(labels, audio, padding=20):
     return keystrokes, labels_list
 
 
-"""
-Written by Shoyo Inokuchi (June 2019)
 
-Scripts for the acoustic keylogger surrounding feature extraction.
-Repository is located at: https://github.com/shoyo-inokuchi/acoustic-keylogger
-"""
-from librosa.feature import mfcc
-
-
-def extract_features(keystroke, sr=44100, n_mfcc=16, n_fft=441, hop_len=110):
-    """Return an MFCC-based feature vector for a given keystroke."""
-    spec = mfcc(y=keystroke.astype(float),
-                sr=sr,
-                n_mfcc=n_mfcc,
-                n_fft=n_fft, # n_fft=220 for a 10ms window
-                hop_length=hop_len, # hop_length=110 for ~2.5ms
-                )
-    return spec.flatten()
+def extract_features(keystroke):
+    D = librosa.stft(keystroke, n_fft=512)
+    S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+    spectrogram = (S_db - np.min(S_db)) / (np.max(S_db) - np.min(S_db))
+    return spectrogram.flatten()
 
 
 def convert_to_array(list_of_keys):
     list_of_arrays = []
     for key in list_of_keys:
-        key_array = np.array(key.get_array_of_samples())
-        list_of_arrays.append(extract_features(key_array, sr=key.frame_rate))
-    
+        key_array = np.array(key)
+        list_of_arrays.append(extract_features(key_array))
+
     return list_of_arrays
 
 def scale_features(data: pd.DataFrame):
@@ -172,7 +154,7 @@ def scale_features(data: pd.DataFrame):
     return sc.fit_transform(data), sc
 
 # Reduce dimensions from >1000 to n_components with PCA
-def dim_reduction(data: pd.DataFrame, n_components=20):
+def dim_reduction(data: pd.DataFrame, n_components=128):
     pca = PCA(n_components=n_components)
     return pca.fit_transform(data), pca
 
@@ -203,8 +185,8 @@ def preprocess_data(data_dir='data', labeled=True):
         label_file = data_dir + '/' + base + '.tsv'
         audio_file = data_dir + '/' + base + '.wav'
 
-        audio, labels, _ = load_data(label_file, audio_file)
-        segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio)
+        audio, labels, sr = load_data(label_file, audio_file)
+        segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
 
         key_df = pd.DataFrame(convert_to_array(segmented_audio))
         key_df['label'] = seg_labels
@@ -228,6 +210,8 @@ def preprocess_data(data_dir='data', labeled=True):
 
 def main():
     df, labels, _ = preprocess_data()
+    print(df.head())
+    print(df.shape)
 
 if __name__ == '__main__':
     main()
