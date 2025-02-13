@@ -151,19 +151,22 @@ def convert_to_array(list_of_keys):
 
 def scale_features(data: pd.DataFrame):
     sc = StandardScaler()
-    return sc.fit_transform(data), sc
+    sc = sc.fit(data)
+    return sc.transform(data), sc
 
 # Reduce dimensions from >1000 to n_components with PCA
 def dim_reduction(data: pd.DataFrame, n_components=128):
     pca = PCA(n_components=n_components)
-    return pca.fit_transform(data), pca
+    pca = pca.fit(data)
+    return pca.transform(data), pca
 
 # One-hot encode labels
 def one_hot(labels):
     labels_reshaped = np.array(labels).reshape(-1, 1)
 
     encoder = OneHotEncoder()
-    encoded_labels = encoder.fit_transform(labels_reshaped)
+    encoder = encoder.fit(labels_reshaped)
+    encoded_labels = encoder.transform(labels_reshaped)
     encoded_labels = encoded_labels.toarray()
     return encoded_labels, encoder
 
