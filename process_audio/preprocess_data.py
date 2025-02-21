@@ -10,6 +10,8 @@ import librosa
 
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
 
+SEGMENT_LEN = 0.2 # each segment should be 200ms long
+
 def load_audio(filename):
     return librosa.load(filename, sr=None)
 
@@ -99,7 +101,7 @@ def read_labels(file_name: str):
     return key_events
 
 
-def load_data(label_file, audio_file="audio.wav"):
+def load_data(label_file="labels.tsv", audio_file="audio.wav"):
     audio, sample_rate = load_audio(audio_file)
     cleaned_audio = reduce_noise(audio, sample_rate)
     
@@ -110,7 +112,7 @@ def load_data(label_file, audio_file="audio.wav"):
     return cleaned_audio, labels, sample_rate
 
 # Segment audio based on labels
-# ms_pad: amount of time (in ms) before press and after release to include
+# ms_pad: amount of time (in ms) before press to include
 def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
     keystrokes = [] # list of segments of audio
     labels_list = [] # list of dicts that contain key pressed, time pressed, time released
@@ -120,11 +122,7 @@ def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
         label = event['key']
         start = event['start'] - padding
 
-        # If there is no release, then the event will be skipped
-        try:
-            end = event['end'] + padding
-        except TypeError:
-            continue
+        end = start + int(sr * SEGMENT_LEN)
 
         key_audio = audio[start:end]
         keystrokes.append(key_audio)
@@ -132,7 +130,22 @@ def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
 
     return keystrokes, labels_list
 
+def rmse(y):
+    return np.sqrt(np.mean(y**2))
 
+# Segments audio based on Root Mean Squared Energy (RMSE)
+def unlabeled_audio_segmentation(audio, sr=44100, threshold=0.005):
+    unlabeled_segments = []
+    ms_sr = int(sr * 0.02) # sample rate multiplied by seconds
+    seg_size = int(sr * SEGMENT_LEN) # 200ms
+
+    n = 0
+    for i in range(0, len(audio), ms_sr):
+        energy = rmse(audio[i:i+ms_sr])
+        if energy > threshold:
+            n += 1
+            unlabeled_segments.append(audio[i:i+seg_size])
+    return unlabeled_segments
 
 def extract_features(keystroke):
     D = librosa.stft(keystroke, n_fft=512)
@@ -172,7 +185,7 @@ def one_hot(labels):
 
 def preprocess_data(data_dir='data', labeled=True):
     base_names = []
-    extensions = ['.txt', '.wav']
+    extensions = ['.txt', '.wav'] if labeled else ['.wav']
     filenames = os.listdir(data_dir)
 
     for file in filenames:
@@ -185,30 +198,49 @@ def preprocess_data(data_dir='data', labeled=True):
     dataframe = pd.DataFrame()
 
     for base in base_names:
+        print(f'Processing {base} file(s)...', end='')
         label_file = data_dir + '/' + base + '.tsv'
         audio_file = data_dir + '/' + base + '.wav'
 
-        audio, labels, sr = load_data(label_file, audio_file)
-        segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
+        if labeled:
+            audio, labels, sr = load_data(label_file, audio_file)
+            segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
 
-        key_df = pd.DataFrame(convert_to_array(segmented_audio))
-        key_df['label'] = seg_labels
+            key_df = pd.DataFrame(convert_to_array(segmented_audio))
+            key_df['label'] = seg_labels
 
-        dataframe = pd.concat([dataframe, key_df], ignore_index=True)
+            dataframe = pd.concat([dataframe, key_df], ignore_index=True)
+        
+        else:
+            audio, _, sr = load_data(label_file=None, audio_file=audio_file)
+            segmented_audio = unlabeled_audio_segmentation(audio, sr)
+
+            key_df = pd.DataFrame(convert_to_array(segmented_audio))
+            dataframe = pd.concat([dataframe, key_df], ignore_index=True)
+        print(" Finished.")
+            
     
-    features = dataframe.drop('label', axis=1)
+    if labeled:
+        features = dataframe.drop('label', axis=1)
+        labels = dataframe['label']
+    else:
+        features = dataframe
     features.fillna(0, inplace=True)
-    labels = dataframe['label']
 
-    scaled_features, scaler = scale_features(features)
-    reduced_features, pca = dim_reduction(scaled_features)
-    one_hot_labels, ohe = one_hot(labels)
+    label_list = None
+    if labeled:
+        scaled_features, scaler = scale_features(features)
+        reduced_features, pca = dim_reduction(scaled_features)
 
-    label_list = (labels, one_hot_labels)
+        one_hot_labels, ohe = one_hot(labels)
 
-    processed_df = pd.DataFrame(reduced_features)
+        label_list = (labels, one_hot_labels)
 
-    return processed_df, label_list, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
+        processed_df = pd.DataFrame(reduced_features)
+
+        return processed_df, label_list, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
+    else:
+        return features, None, None
 
 
 def main():
