@@ -147,18 +147,18 @@ def unlabeled_audio_segmentation(audio, sr=44100, threshold=0.005):
             unlabeled_segments.append(audio[i:i+seg_size])
     return unlabeled_segments
 
-def extract_features(keystroke):
-    D = librosa.stft(keystroke, n_fft=512)
+def extract_features(keystroke, n_fft):
+    D = librosa.stft(keystroke, n_fft=n_fft)
     S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
     spectrogram = (S_db - np.min(S_db)) / (np.max(S_db) - np.min(S_db))
     return spectrogram.flatten()
 
 
-def convert_to_array(list_of_keys):
+def convert_to_array(list_of_keys, n_fft=512):
     list_of_arrays = []
     for key in list_of_keys:
         key_array = np.array(key)
-        list_of_arrays.append(extract_features(key_array))
+        list_of_arrays.append(extract_features(key_array, n_fft))
 
     return list_of_arrays
 
@@ -173,15 +173,13 @@ def dim_reduction(data: pd.DataFrame, n_components=128):
     pca = pca.fit(data)
     return pca.transform(data), pca
 
-# One-hot encode labels
+# Fit one-hot encoder for labels
 def one_hot(labels):
     labels_reshaped = np.array(labels).reshape(-1, 1)
 
     encoder = OneHotEncoder()
     encoder = encoder.fit(labels_reshaped)
-    encoded_labels = encoder.transform(labels_reshaped)
-    encoded_labels = encoded_labels.toarray()
-    return encoded_labels, encoder
+    return encoder
 
 def preprocess_data(data_dir='data', labeled=True):
     base_names = []
@@ -227,18 +225,15 @@ def preprocess_data(data_dir='data', labeled=True):
         features = dataframe
     features.fillna(0, inplace=True)
 
-    label_list = None
     if labeled:
         scaled_features, scaler = scale_features(features)
         reduced_features, pca = dim_reduction(scaled_features)
 
-        one_hot_labels, ohe = one_hot(labels)
-
-        label_list = (labels, one_hot_labels)
+        ohe = one_hot(labels)
 
         processed_df = pd.DataFrame(reduced_features)
 
-        return processed_df, label_list, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
+        return processed_df, labels, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
     else:
         return features, None, None
 

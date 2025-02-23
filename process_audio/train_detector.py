@@ -1,18 +1,17 @@
 import pandas as pd
 import numpy as np
+from preprocess_data import preprocess_data
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 import os
 from shutil import rmtree
-
-from preprocess_data import preprocess_data
 from deep_learning_functions import *
 
 # Define model
-class ClassificationModel(torch.nn.Module):
+class DetectorModel(torch.nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
-        super(ClassificationModel, self).__init__()
+        super(DetectorModel, self).__init__()
         self.linear_sequential_stack = nn.Sequential(
             nn.Linear(input_size, hidden_size[0]),
             nn.ReLU(),
@@ -34,19 +33,21 @@ class ClassificationModel(torch.nn.Module):
         logits = self.linear_sequential_stack(x)
         return logits
 
-def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=True, save_dir='model_data/classifier/', delete_existing_model=True):
+
+def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dict, 
+                   data_dir='data', epochs=1_000, return_model=True,
+                   save_model=True, save_dir='model_data/', delete_existing_model=True):
+    save_dir = save_dir + 'detector/'
 
     # Deletes model_data directory
     if delete_existing_model and os.path.exists(save_dir):
-        user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [Y/n] ")
+        user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [y/N] ")
         if user_input.lower() == 'y':
             rmtree(save_dir)
             print('Directory deleted')
         else:
             print("Files will not be deleted. Exiting program...")
             exit(0)
-
-    features, (labels, labels_ohe), transformers = preprocess_data()
 
     # Oversample and augment dataset
     X, y = oversample_datset(features.to_numpy(), labels)
@@ -64,12 +65,12 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
     y_test = torch.from_numpy(y_test.astype(np.float32)).to(device)
 
     input_size = X_train.shape[1]
-    output_size = y_train.shape[1]
-    hidden_size = [256, 128, 64] # Hidden layer sizes
+    output_size = 2 # Binary output
+    hidden_size = [64, 32, 16] # Hidden layer sizes
 
-    model = ClassificationModel(input_size, hidden_size, output_size).to(device)
-    l = nn.CrossEntropyLoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.0012, weight_decay=0.00001, momentum=0.9)
+    model = DetectorModel(input_size, hidden_size, output_size).to(device)
+    l = nn.BCELoss()
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.0001, weight_decay=0.00001, momentum=0.5)
 
     ## Training model
 
@@ -90,6 +91,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         pred = model(X_train)
         loss = l(pred, y_train)
         optimizer.zero_grad()
+        
         loss.backward()
         optimizer.step()
         tr_loss = loss.item()
@@ -107,7 +109,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         train_acc[epoch] = tr_acc
         val_acc[epoch] = te_acc
         final_acc = int(te_acc * 100)
-        if (epoch+1) % 100 == 0 or epoch == 0:
+        if (epoch+1) % 50 == 0 or epoch == 0:
             print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
     
     if not os.path.exists(save_dir):
@@ -132,7 +134,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         return model, trainhist
 
 def main():
-    train_model(return_model=False)
+    train_detector(return_model=False)
 
 if __name__ == '__main__':
     main()
