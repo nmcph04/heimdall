@@ -85,7 +85,7 @@ def detector_audio_segmentation(labels, audio, sr=44100, ms_pad=5):
 
 # Preprocesses data for the detector model
 # Only processes labeled data
-def preprocess_for_detector(data_dir='data/'):
+def preprocess_for_detector(data_dir='data/', init_transformers=True):
     base_names = []
     extensions = ['.txt', '.wav']
     filenames = os.listdir(data_dir)
@@ -118,13 +118,13 @@ def preprocess_for_detector(data_dir='data/'):
     features = dataframe.drop('label', axis=1)
     labels = dataframe['label']
 
-    encoder = one_hot(labels)
+    if init_transformers:
+        encoder = one_hot(labels)
 
-    scaled_features, scaler = scale_features(features)
-    reduced_features, pca = dim_reduction(scaled_features)
-    processed_df = pd.DataFrame(reduced_features)
+        scaled_features, scaler = scale_features(features)
+        reduced_features, pca = dim_reduction(scaled_features)
 
-    return processed_df, labels, {'scaler': scaler, 'pca': pca, 'encoder': encoder}
+        return features, labels, {'scaler': scaler, 'pca': pca, 'encoder': encoder}
 
 def main():
     df = preprocess_for_detector()

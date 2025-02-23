@@ -1,38 +1,12 @@
 import pandas as pd
 import numpy as np
-from preprocess_data import preprocess_data
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn as nn
 import os
 from shutil import rmtree
 from deep_learning_functions import *
-
-# Define model
-class DetectorModel(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(DetectorModel, self).__init__()
-        self.linear_sequential_stack = nn.Sequential(
-            nn.Linear(input_size, hidden_size[0]),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-
-            nn.Linear(hidden_size[0], hidden_size[1]),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-
-            nn.Linear(hidden_size[1], hidden_size[2]),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-
-            nn.Linear(hidden_size[2], output_size),
-            nn.Softmax(dim=1),
-        )
-
-    def forward(self, x):
-        logits = self.linear_sequential_stack(x)
-        return logits
-
+from models import DetectorModel
 
 def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dict, 
                    data_dir='data', epochs=1_000, return_model=True,

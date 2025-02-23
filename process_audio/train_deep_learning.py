@@ -5,34 +5,9 @@ import torch
 import torch.nn as nn
 import os
 from shutil import rmtree
-
 from preprocess_data import preprocess_data
 from deep_learning_functions import *
-
-# Define model
-class ClassificationModel(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(ClassificationModel, self).__init__()
-        self.linear_sequential_stack = nn.Sequential(
-            nn.Linear(input_size, hidden_size[0]),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-
-            nn.Linear(hidden_size[0], hidden_size[1]),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-
-            nn.Linear(hidden_size[1], hidden_size[2]),
-            nn.ReLU(),
-            nn.Dropout(0.2),
-
-            nn.Linear(hidden_size[2], output_size),
-            nn.Softmax(dim=1),
-        )
-
-    def forward(self, x):
-        logits = self.linear_sequential_stack(x)
-        return logits
+from models import ClassificationModel
 
 def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=True, save_dir='model_data/classifier/', delete_existing_model=True):
 
@@ -46,7 +21,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
             print("Files will not be deleted. Exiting program...")
             exit(0)
 
-    features, (labels, labels_ohe), transformers = preprocess_data()
+    features, labels, transformers = preprocess_data()
 
     # Oversample and augment dataset
     X, y = oversample_datset(features.to_numpy(), labels)

@@ -2,7 +2,8 @@ import numpy as np
 from imblearn.over_sampling import RandomOverSampler
 import torch
 import os
-from pickle import dump
+from pickle import dump, load
+from models import DetectorModel, ClassificationModel
 
 # Balance dataset with oversampling
 def oversample_datset(X, y):
@@ -70,3 +71,61 @@ def dump_transformers(transformers: dict, dir=''):
     for name, transformer in transformers.items():
         path = dump_dir + name + '.pkl'
         dump(transformer, open(path, 'wb'))
+
+def read_model_info(dir='model_data/'):
+    with open(dir + 'model_info.txt', 'r') as file:
+        input_layer = int(file.readline().strip())
+        hidden_layers = [int(x) for x in file.readline().strip().split(',') if x.strip()]
+        output_layer = int(file.readline().strip())
+    
+    return input_layer, hidden_layers, output_layer 
+
+def feature_pipeline(transformers, features):
+    scaled = transformers['scaler'].transform(features)
+    return transformers['pca'].transform(scaled)
+
+def label_ohe(encoder, labels):
+    return encoder.transform(labels, sparse_output=False)
+
+def transform_data(X, y, transformers: dict):
+    features = feature_pipeline(transformers, X)
+    labels = None
+    if y:
+        labels = label_ohe(transformers['encoder'], y)
+
+    return features, labels
+
+# Load data transformers
+def load_transformers(dir='model_data/classifier/transformer_dumps/'):
+    encoder = load(open(dir + 'encoder.pkl', 'rb'))
+    scaler = load(open(dir + 'scaler.pkl', 'rb'))
+    pca = load(open(dir + 'pca.pkl', 'rb'))
+
+    return {'encoder': encoder, 'scaler': scaler, 'pca': pca}
+
+# dir is the directory that has both the classifier and detector directories within it
+# Model type must be either 'classifier' or 'detector'
+def load_model(model_type: str, dir='model_data/'):
+    path = dir
+    is_classfier = False
+    if model_type.lower() == 'classifier':
+        path += 'classifier/'
+        is_classfier = True
+    elif model_type.lower() == 'detector':
+        path += 'detector/'
+    else:
+        raise Exception(f"model_type is {model_type}, but must be either 'classifier' or 'detector'!")
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    input_size, hidden_sizes, output_size = read_model_info(path)
+    
+    if is_classfier:
+        model = ClassificationModel(input_size, hidden_sizes, output_size).to(device)
+    else:
+        model = DetectorModel(input_size, hidden_sizes, output_size).to(device)
+
+    model_path = path + 'model.pt'
+    model.load_state_dict(torch.load(model_path, weights_only=True))
+    model.eval()
+    return model

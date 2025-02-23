@@ -7,6 +7,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import OneHotEncoder
 import librosa
+import torch
+from deep_learning_functions import load_model, load_transformers, transform_data
 
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
 
@@ -130,22 +132,50 @@ def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
 
     return keystrokes, labels_list
 
-def rmse(y):
-    return np.sqrt(np.mean(y**2))
+# Indentifies keystrokes using detector model and segments them
+def unlabeled_audio_segmentation(audio, sr=44100):
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-# Segments audio based on Root Mean Squared Energy (RMSE)
-def unlabeled_audio_segmentation(audio, sr=44100, threshold=0.005):
-    unlabeled_segments = []
-    ms_sr = int(sr * 0.02) # sample rate multiplied by seconds
-    seg_size = int(sr * SEGMENT_LEN) # 200ms
+    # loads model and transformers
+    model = load_model('detector')
+    transformers = load_transformers('model_data/detector/transformer_dumps/')
 
-    n = 0
-    for i in range(0, len(audio), ms_sr):
-        energy = rmse(audio[i:i+ms_sr])
-        if energy > threshold:
-            n += 1
-            unlabeled_segments.append(audio[i:i+seg_size])
-    return unlabeled_segments
+    keystrokes = []
+    keystroke_length = int(SEGMENT_LEN * sr)
+
+    # iterate over 20ms chunks of audio
+    chunk_size = int(sr * 0.02) # 20ms
+
+    i = 0
+    while i < len(audio):
+        chunk_end = min(i + chunk_size, len(audio))
+        chunk = audio[i:chunk_end]
+
+        # pad chunk if it's on the end of the file
+        if len(chunk) < chunk_size:
+            diff = chunk_size - len(chunk)
+            chunk = np.pad(chunk, (0, diff), 'constant', constant_values=(0))
+
+        # transform chunk
+        chunk_array = convert_to_array([chunk], n_fft=64)
+        transformed_chunk, _ = transform_data(chunk_array, None, transformers)
+
+        # run detector on chunk
+        # TODO batch chunks before running model on them
+        pred = model(torch.tensor(transformed_chunk.astype(np.float32)).to(device)).cpu().detach().numpy()
+        pred_int = transformers['encoder'].inverse_transform(pred).squeeze()
+        if pred_int == 1:
+            # get keystroke segment (200ms)
+            keystroke = audio[i:i + keystroke_length]
+            keystrokes.append(keystroke)
+
+            # skip past keystroke for detector
+            i += keystroke_length
+        
+        # go to next chunk
+        i += chunk_size
+        
+    return keystrokes
 
 def extract_features(keystroke, n_fft):
     D = librosa.stft(keystroke, n_fft=n_fft)
@@ -154,7 +184,7 @@ def extract_features(keystroke, n_fft):
     return spectrogram.flatten()
 
 
-def convert_to_array(list_of_keys, n_fft=512):
+def convert_to_array(list_of_keys: list, n_fft=512):
     list_of_arrays = []
     for key in list_of_keys:
         key_array = np.array(key)
@@ -235,6 +265,7 @@ def preprocess_data(data_dir='data', labeled=True):
 
         return processed_df, labels, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
     else:
+        # TODO add transforming of audio data using saved model here
         return features, None, None
 
 
