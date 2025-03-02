@@ -36,43 +36,70 @@ def load_data(label_file="labels.tsv", audio_file="audio.wav"):
 
     return cleaned_audio, key_events, sample_rate
 
-def detector_audio_segmentation(labels, audio, sr=44100, ms_pad=5):
+# Encodes an array with binary labels with one-hot encoding
+def encode_labels(labels: np.ndarray):
+    encoded = []
+    for label in labels:
+        encoded.append([0, 1] if label == 1 else [1, 0])
+    
+    return np.array(encoded)
+
+# offset: will also use +-x seconds from event_start as positive samples 
+#   must be less than segment length (20ms by default)
+#   should be less than or equal to half of segment length
+def detector_audio_segmentation(labels, audio, sr=44100, offset=0.01):
     samples = []
     labels_list = []
-    padding = int(sr * (ms_pad / 1000.))
     sample_length = int(SEGMENT_LEN * sr)
+    offset_ms = int(offset * 1000.)
     audio_len = len(audio)
+
+    if (offset / 1000.) >= sample_length:
+        raise Exception(f"Offset must be less than segment length({SEGMENT_LEN}), but got {offset}!")
 
     positive_times = []
 
     # Get positive samples
     for event_start in labels:
         event_start = int((event_start / 1000.) * sr) # Change event_start from ms to samples
-        # Doesn't let the start timestamp be negative
-        padded_start = max(0, event_start - padding)
 
-        end = min(padded_start + sample_length, audio_len)
+        # from -offset to offset ms
+        for start_offset in range(offset_ms * -1, offset_ms + 1):
+            start_offset /= 1000.
+            offset_samples = int(start_offset * sr)
 
-        samples.append(audio[padded_start:end])
-        labels_list.append(1)
-        positive_times.append((padded_start, end))
+            start = event_start + offset_samples
+            if event_start < 0:
+                continue
+
+            # limits end of sample to end of audio
+            end = min(start + sample_length, audio_len)
+
+            samples.append(audio[start:end])
+            labels_list.append(1)
+
+        # add offset range to list so they can be skipped for negative samples
+        offset_range_start = int(event_start - (offset_ms * -1 / 1000.))
+        offset_range_end = int(event_start + (offset_ms / 1000.))
+        positive_times.append((offset_range_start, offset_range_end))
     
     # Get negative samples
     for idx in range(0, audio_len, sample_length):
         invalid = False
-        start = max(0, idx - padding)
-        end = min(start + sample_length, audio_len)
+        end = min(idx + sample_length, audio_len)
 
         # If selected segment is in a positive sample, it will be skipped
         for segment in positive_times:
             # Will stop the positive sample checking if the current range ends before it starts
             if end <= segment[0]:
                 break
-            elif (segment[0] <= start <= segment[1]) and (segment[0] <= end <= segment[1]):
+            elif (segment[0] <= idx <= segment[1]) and (segment[0] <= end <= segment[1]):
                 invalid = True
                 break
+
         if not invalid:
-            sample = audio[start:end]
+            sample = audio[idx:end]
+
             # Pads the end with zeros if it is too small (e.g. it was at the end of the recording)
             if len(sample) != sample_length:
                 pad_amt = sample_length - len(sample)
@@ -119,12 +146,12 @@ def preprocess_for_detector(data_dir='data/', init_transformers=True):
     labels = dataframe['label']
 
     if init_transformers:
-        encoder = one_hot(labels)
+        encoded_labels = encode_labels(labels)
 
         scaled_features, scaler = scale_features(features)
         reduced_features, pca = dim_reduction(scaled_features)
 
-        return features, labels, {'scaler': scaler, 'pca': pca, 'encoder': encoder}
+        return reduced_features, encoded_labels, {'scaler': scaler, 'pca': pca}
 
 def main():
     df = preprocess_for_detector()

@@ -24,9 +24,8 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
             exit(0)
 
     # Oversample and augment dataset
-    X, y = oversample_datset(features.to_numpy(), labels)
+    X, y = oversample_datset(features, labels)
     X, y = augment_data(X, y, 3.)
-    y = transformers['encoder'].transform(np.array(y).reshape(-1, 1)).toarray()
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
 
     # Uses GPU if available, otherwise uses CPU
@@ -40,11 +39,11 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
 
     input_size = X_train.shape[1]
     output_size = 2 # Binary output
-    hidden_size = [64, 32, 16] # Hidden layer sizes
+    hidden_size = [128, 32, 16] # Hidden layer sizes
 
     model = DetectorModel(input_size, hidden_size, output_size).to(device)
     l = nn.BCELoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.0001, weight_decay=0.00001, momentum=0.5)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.0002, weight_decay=0.00001, momentum=0.5)
 
     ## Training model
 

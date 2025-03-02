@@ -1,5 +1,6 @@
 import numpy as np
-from imblearn.over_sampling import RandomOverSampler
+import pandas as pd
+from imblearn.over_sampling import SMOTE
 import torch
 import os
 from pickle import dump, load
@@ -7,10 +8,23 @@ from models import DetectorModel, ClassificationModel
 
 # Balance dataset with oversampling
 def oversample_datset(X, y):
-    oversample = RandomOverSampler()
-    over_X, over_y = oversample.fit_resample(X, y)
+    if type(X) == pd.DataFrame:
+        X = X.to_numpy()
+    elif type(X) == list:
+        X = np.array(X)
+    
+    decoded_y = []
+    for label in y:
+        decoded_y.append(decode_binary_label(label))
+    decoded_y = np.array(decoded_y)
 
-    return over_X, over_y
+    oversample = SMOTE()
+    over_X, over_y = oversample.fit_resample(X, decoded_y)
+
+    y_resampled = np.zeros((over_y.size, y.shape[1]))
+    y_resampled[np.arange(over_y.size), over_y] = 1
+
+    return over_X, y_resampled
 
 # Perform data augmentation to increase dataset size
 def augment_data(X: np.ndarray, y: np.ndarray, pct_added: float):
@@ -35,6 +49,10 @@ def augment_data(X: np.ndarray, y: np.ndarray, pct_added: float):
     synthesized_y = np.array(synthesized_y)
     
     return np.append(X, synthesized_X, axis=0), np.append(y, synthesized_y, axis=0)
+
+# Decodes binary labels encoded with one-hot encoding
+def decode_binary_label(label:np.ndarray, threshold=0.9):
+    return 1 if label[1] >= threshold else 0
 
 # Get accuracy
 def getAcc(pred_y: torch.Tensor, true_y: torch.Tensor):
@@ -97,11 +115,17 @@ def transform_data(X, y, transformers: dict):
 
 # Load data transformers
 def load_transformers(dir='model_data/classifier/transformer_dumps/'):
-    encoder = load(open(dir + 'encoder.pkl', 'rb'))
+    encoder = None
+    try:
+        encoder = load(open(dir + 'encoder.pkl', 'rb'))
+    except:
+        pass
     scaler = load(open(dir + 'scaler.pkl', 'rb'))
     pca = load(open(dir + 'pca.pkl', 'rb'))
-
-    return {'encoder': encoder, 'scaler': scaler, 'pca': pca}
+    if encoder: 
+        return {'encoder': encoder, 'scaler': scaler, 'pca': pca}
+    else:
+        return {'scaler': scaler, 'pca': pca}
 
 # dir is the directory that has both the classifier and detector directories within it
 # Model type must be either 'classifier' or 'detector'

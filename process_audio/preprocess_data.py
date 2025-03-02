@@ -8,7 +8,7 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import OneHotEncoder
 import librosa
 import torch
-from deep_learning_functions import load_model, load_transformers, transform_data
+from deep_learning_functions import load_model, load_transformers, transform_data, decode_binary_label
 
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
 
@@ -133,7 +133,7 @@ def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
     return keystrokes, labels_list
 
 # Indentifies keystrokes using detector model and segments them
-def unlabeled_audio_segmentation(audio, sr=44100):
+def unlabeled_audio_segmentation(audio, sr=44100, confidence_threshold=0.9):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # loads model and transformers
@@ -163,14 +163,15 @@ def unlabeled_audio_segmentation(audio, sr=44100):
         # run detector on chunk
         # TODO batch chunks before running model on them
         pred = model(torch.tensor(transformed_chunk.astype(np.float32)).to(device)).cpu().detach().numpy()
-        pred_int = transformers['encoder'].inverse_transform(pred).squeeze()
+        # only considers it positive if the model confidence is over the threshold
+        pred_int = decode_binary_label(pred[0], confidence_threshold)
         if pred_int == 1:
             # get keystroke segment (200ms)
             keystroke = audio[i:i + keystroke_length]
             keystrokes.append(keystroke)
 
-            # skip past keystroke for detector
-            i += keystroke_length
+            # skip past part of keystroke
+            #i += chunk_size * 4
         
         # go to next chunk
         i += chunk_size
