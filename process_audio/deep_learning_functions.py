@@ -103,13 +103,13 @@ def feature_pipeline(transformers, features):
     return transformers['pca'].transform(scaled)
 
 def label_ohe(encoder, labels):
-    return encoder.transform(labels, sparse_output=False)
+    return encoder.transform(labels.reshape(-1, 1))
 
 def transform_data(X, y, transformers: dict):
     features = feature_pipeline(transformers, X)
     labels = None
     if y:
-        labels = label_ohe(transformers['encoder'], y)
+        labels = label_ohe(transformers['encoder'], np.array(y))
 
     return features, labels
 

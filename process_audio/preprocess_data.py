@@ -208,7 +208,7 @@ def dim_reduction(data: pd.DataFrame, n_components=128):
 def one_hot(labels):
     labels_reshaped = np.array(labels).reshape(-1, 1)
 
-    encoder = OneHotEncoder()
+    encoder = OneHotEncoder(sparse_output=False)
     encoder = encoder.fit(labels_reshaped)
     return encoder
 
