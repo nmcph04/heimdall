@@ -6,25 +6,28 @@ import os
 from pickle import dump, load
 from models import DetectorModel, ClassificationModel
 
-# Balance dataset with oversampling
-def oversample_datset(X, y):
-    if type(X) == pd.DataFrame:
-        X = X.to_numpy()
-    elif type(X) == list:
-        X = np.array(X)
+def oversample_dataset(features, labels, encoder):
+    # Gets number of unique label elements
+    label_shape = encoder.transform(np.array(labels[0]).reshape(-1, 1)).shape[1]
+
+    # Converts labels to integers for SMOTE to process
+    encoded_labels = list(int(np.argmax(x)) for x in encoder.transform(pd.DataFrame(labels)))
+
+    oversampler = SMOTE()
+    over_X, over_y = oversampler.fit_resample(features, encoded_labels)
+
+    # Convert integer labels back into class names
+    zero_array = np.zeros(label_shape)
+    decoded_labels = []
+
+    for label in over_y:
+        decoded = zero_array.copy()
+        decoded[label] = 1
+        decoded_labels.append(decoded)
     
-    decoded_y = []
-    for label in y:
-        decoded_y.append(decode_binary_label(label))
-    decoded_y = np.array(decoded_y)
+    class_name_labels = encoder.inverse_transform(np.array(decoded_labels))
 
-    oversample = SMOTE()
-    over_X, over_y = oversample.fit_resample(X, decoded_y)
-
-    y_resampled = np.zeros((over_y.size, y.shape[1]))
-    y_resampled[np.arange(over_y.size), over_y] = 1
-
-    return over_X, y_resampled
+    return np.array(over_X), np.array(class_name_labels)
 
 # Perform data augmentation to increase dataset size
 def augment_data(X: np.ndarray, y: np.ndarray, pct_added: float):

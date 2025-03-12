@@ -212,6 +212,28 @@ def one_hot(labels):
     encoder = encoder.fit(labels_reshaped)
     return encoder
 
+# All classes with less than x samples will be reduced into a single class
+def reduce_small_classes(labels, threshold=10):
+    reduced_class_label = "□"
+
+    # Get classes to reduce
+    classes_to_reduce = []
+    class_names, class_counts = np.unique(labels, return_counts=True)
+    for i in range(len(class_names)):
+        count = class_counts[i]
+        label = class_names[i]
+        
+        if count <= threshold:
+            classes_to_reduce.append(label)
+    
+    reduced_labels = labels.copy()
+    # Get all indices of the elements to reduce
+    for i in range(len(labels)):
+        if labels[i] in classes_to_reduce:
+            reduced_labels[i] = reduced_class_label
+    
+    return np.array(reduced_labels)
+
 def preprocess_data(data_dir='data', labeled=True):
     base_names = []
     extensions = ['.txt', '.wav'] if labeled else ['.wav']
@@ -247,14 +269,13 @@ def preprocess_data(data_dir='data', labeled=True):
             key_df = pd.DataFrame(convert_to_array(segmented_audio))
             dataframe = pd.concat([dataframe, key_df], ignore_index=True)
         print(" Finished.")
-            
-    
+
     if labeled:
         features = dataframe.drop('label', axis=1)
         labels = dataframe['label']
+        labels = reduce_small_classes(labels)
     else:
         features = dataframe
-    features.fillna(0, inplace=True)
 
     if labeled:
         scaled_features, scaler = scale_features(features)
@@ -263,6 +284,9 @@ def preprocess_data(data_dir='data', labeled=True):
         ohe = one_hot(labels)
 
         processed_df = pd.DataFrame(reduced_features)
+
+        pp_data = processed_df.assign(label=labels)
+        pp_data.to_csv('pp_data.csv', header=True, index=False)
 
         return processed_df, labels, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
     else:

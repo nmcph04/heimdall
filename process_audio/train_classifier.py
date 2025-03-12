@@ -12,7 +12,7 @@ from models import ClassificationModel
 def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=True, save_dir='model_data/classifier/', delete_existing_model=True):
 
     # Deletes model_data directory
-    if delete_existing_model and os.path.exists(save_dir):
+    if save_model and delete_existing_model and os.path.exists(save_dir):
         user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [Y/n] ")
         if user_input.lower() == 'y':
             rmtree(save_dir)
@@ -21,12 +21,12 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
             print("Files will not be deleted. Exiting program...")
             exit(0)
 
-    features, labels, transformers = preprocess_data()
+    features, labels, transformers = preprocess_data(data_dir=data_dir)
 
     # Oversample and augment dataset
-    X, y = oversample_datset(features.to_numpy(), labels)
+    X, y = oversample_dataset(features.to_numpy(), labels, transformers['encoder'])
     X, y = augment_data(X, y, 3.)
-    y = transformers['encoder'].transform(np.array(y).reshape(-1, 1)).toarray()
+    y = transformers['encoder'].transform(y.reshape(-1, 1))
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
 
     # Uses GPU if available, otherwise uses CPU
@@ -44,7 +44,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
 
     model = ClassificationModel(input_size, hidden_size, output_size).to(device)
     l = nn.CrossEntropyLoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.0012, weight_decay=0.00001, momentum=0.9)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.0012, weight_decay=0.00001, momentum=0.3)
 
     ## Training model
 
@@ -85,26 +85,28 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         if (epoch+1) % 100 == 0 or epoch == 0:
             print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
     
-    if not os.path.exists(save_dir):
+    if save_model and not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    # Save transformer models
-    dump_transformers(transformers, dir=save_dir)
+    if save_model:
+        # Save transformer models
+        dump_transformers(transformers, dir=save_dir)
 
-    # Save model layer sizes to file
-    write_model_info(input_size, hidden_size, output_size, dir=save_dir)
+        # Save model layer sizes to file
+        write_model_info(input_size, hidden_size, output_size, dir=save_dir)
 
-    # Save model state dict to file
-    torch.save(model.state_dict(), f'{save_dir}/model.pt')
-    print(f"Successfully saved model with a validation accuracy of {final_acc}% after {epochs} epochs.")
+        # Save model state dict to file
+        torch.save(model.state_dict(), f'{save_dir}/model.pt')
+        print(f"Successfully saved model with a validation accuracy of {final_acc}% after {epochs} epochs.")
 
     trainhist = pd.DataFrame({'train_loss': train_loss, 'train_acc': train_acc,
             'val_loss': val_loss, 'val_acc': val_acc, 'epoch': np.arange(epochs)})
     
-    trainhist.to_csv(save_dir + 'trainhist.csv')
+    if save_model:
+        trainhist.to_csv(save_dir + 'trainhist.csv')
 
     if return_model:
-        return model, trainhist
+        return model, trainhist, transformers
 
 def main():
     train_model(return_model=False)

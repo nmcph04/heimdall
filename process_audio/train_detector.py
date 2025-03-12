@@ -24,7 +24,7 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
             exit(0)
 
     # Oversample and augment dataset
-    X, y = oversample_datset(features, labels)
+    X, y = oversample_dataset(features, labels)
     X, y = augment_data(X, y, 3.)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
 
