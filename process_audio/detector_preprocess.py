@@ -36,14 +36,6 @@ def load_data(label_file="labels.tsv", audio_file="audio.wav"):
 
     return cleaned_audio, key_events, sample_rate
 
-# Encodes an array with binary labels with one-hot encoding
-def encode_labels(labels: np.ndarray):
-    encoded = []
-    for label in labels:
-        encoded.append([0, 1] if label == 1 else [1, 0])
-    
-    return np.array(encoded)
-
 # offset: will also use +-x seconds from event_start as positive samples 
 #   must be less than segment length (20ms by default)
 #   should be less than or equal to half of segment length
@@ -146,12 +138,10 @@ def preprocess_for_detector(data_dir='data/', init_transformers=True):
     labels = dataframe['label']
 
     if init_transformers:
-        encoded_labels = encode_labels(labels)
-
         scaled_features, scaler = scale_features(features)
         reduced_features, pca = dim_reduction(scaled_features)
 
-        return reduced_features, encoded_labels, {'scaler': scaler, 'pca': pca}
+        return reduced_features, labels, {'scaler': scaler, 'pca': pca}
 
 def main():
     df = preprocess_for_detector()

@@ -6,6 +6,11 @@ import os
 from pickle import dump, load
 from models import DetectorModel, ClassificationModel
 
+def detector_oversample(features, labels):
+    oversampler = SMOTE()
+    over_X, over_y = oversampler.fit_resample(features, labels)
+    return over_X, over_y
+
 def oversample_dataset(features, labels, encoder):
     # Gets number of unique label elements
     label_shape = encoder.transform(np.array(labels[0]).reshape(-1, 1)).shape[1]
@@ -56,6 +61,19 @@ def augment_data(X: np.ndarray, y: np.ndarray, pct_added: float):
 # Decodes binary labels encoded with one-hot encoding
 def decode_binary_label(label:np.ndarray, threshold=0.9):
     return 1 if label[1] >= threshold else 0
+
+# Get accuracy
+def detector_accuracy(pred_y: torch.Tensor, true_y: torch.Tensor):
+    # Get binary prediction from sigmoid output
+    pred_y = pred_y.cpu().detach().numpy()
+    pred_y_binary = (pred_y >= 0.9).astype(np.float32)
+
+    true_y = true_y.cpu().detach().numpy()
+
+    num_values = np.float32(pred_y.shape[0])
+    num_correct = np.sum(pred_y_binary == true_y)
+    
+    return num_correct / num_values
 
 # Get accuracy
 def getAcc(pred_y: torch.Tensor, true_y: torch.Tensor):

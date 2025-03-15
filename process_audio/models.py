@@ -42,7 +42,7 @@ class DetectorModel(torch.nn.Module):
             nn.Dropout(0.2),
 
             nn.Linear(hidden_size[2], output_size),
-            nn.Softmax(dim=1),
+            nn.Sigmoid(),
         )
 
     def forward(self, x):

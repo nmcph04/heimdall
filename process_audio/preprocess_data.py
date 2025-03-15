@@ -164,10 +164,16 @@ def unlabeled_audio_segmentation(audio, sr=44100, confidence_threshold=0.9):
         # TODO batch chunks before running model on them
         pred = model(torch.tensor(transformed_chunk.astype(np.float32)).to(device)).cpu().detach().numpy()
         # only considers it positive if the model confidence is over the threshold
-        pred_int = decode_binary_label(pred[0], confidence_threshold)
+        pred_int = (pred >= confidence_threshold)
         if pred_int == 1:
             # get keystroke segment (200ms)
             keystroke = audio[i:i + keystroke_length]
+
+            # pad keystrokes
+            if len(keystroke) != keystroke_length:
+                diff = keystroke_length - len(keystroke)
+                keystroke = np.pad(keystroke, (0, diff), 'constant', constant_values=(0))
+
             keystrokes.append(keystroke)
 
             # skip past part of keystroke

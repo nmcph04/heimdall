@@ -24,7 +24,7 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
             exit(0)
 
     # Oversample and augment dataset
-    X, y = oversample_dataset(features, labels)
+    X, y = detector_oversample(features, labels)
     X, y = augment_data(X, y, 3.)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
 
@@ -33,12 +33,12 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
 
     # Convert datasets to tensors
     X_train = torch.tensor(X_train.astype(np.float32)).to(device)
-    y_train = torch.tensor(y_train.astype(np.float32)).to(device)
+    y_train = torch.tensor(y_train.reshape(-1, 1).astype(np.float32)).to(device)
     X_test = torch.from_numpy(X_test.astype(np.float32)).to(device)
-    y_test = torch.from_numpy(y_test.astype(np.float32)).to(device)
+    y_test = torch.from_numpy(y_test.reshape(-1, 1).astype(np.float32)).to(device)
 
     input_size = X_train.shape[1]
-    output_size = 2 # Binary output
+    output_size = 1 # Binary output
     hidden_size = [128, 32, 16] # Hidden layer sizes
 
     model = DetectorModel(input_size, hidden_size, output_size).to(device)
@@ -68,13 +68,13 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
         loss.backward()
         optimizer.step()
         tr_loss = loss.item()
-        tr_acc = getAcc(pred, y_train)
+        tr_acc = detector_accuracy(pred, y_train)
 
         model.eval()
 
         pred = model(X_test)
         te_loss = l(pred, y_test).item()
-        te_acc = getAcc(pred, y_test)
+        te_acc = detector_accuracy(pred, y_test)
 
 
         train_loss[epoch] = tr_loss

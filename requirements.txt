@@ -12,4 +12,6 @@ pynput
 pyaudio
 wave
 torch
+notebook
+ipython
 ipykernel
