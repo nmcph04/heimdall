@@ -40,10 +40,11 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
     input_size = X_train.shape[1]
     output_size = 1 # Binary output
     hidden_size = [128, 32, 16] # Hidden layer sizes
+    lr = 0.0005
 
     model = DetectorModel(input_size, hidden_size, output_size).to(device)
     l = nn.BCELoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.0002, weight_decay=0.00001, momentum=0.5)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=0.00001, momentum=0.2)
 
     ## Training model
 

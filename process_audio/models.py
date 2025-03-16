@@ -31,15 +31,15 @@ class DetectorModel(torch.nn.Module):
         self.linear_sequential_stack = nn.Sequential(
             nn.Linear(input_size, hidden_size[0]),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.4),
 
             nn.Linear(hidden_size[0], hidden_size[1]),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.4),
 
             nn.Linear(hidden_size[1], hidden_size[2]),
             nn.ReLU(),
-            nn.Dropout(0.2),
+            nn.Dropout(0.4),
 
             nn.Linear(hidden_size[2], output_size),
             nn.Sigmoid(),

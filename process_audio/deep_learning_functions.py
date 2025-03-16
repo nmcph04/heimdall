@@ -62,11 +62,11 @@ def augment_data(X: np.ndarray, y: np.ndarray, pct_added: float):
 def decode_binary_label(label:np.ndarray, threshold=0.9):
     return 1 if label[1] >= threshold else 0
 
-# Get accuracy
+# Get accuracy for the detector model
 def detector_accuracy(pred_y: torch.Tensor, true_y: torch.Tensor):
     # Get binary prediction from sigmoid output
     pred_y = pred_y.cpu().detach().numpy()
-    pred_y_binary = (pred_y >= 0.9).astype(np.float32)
+    pred_y_binary = (pred_y >= 0.5).astype(np.float32)
 
     true_y = true_y.cpu().detach().numpy()
 
