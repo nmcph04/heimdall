@@ -70,7 +70,7 @@ def detector_accuracy(pred_y: torch.Tensor, true_y: torch.Tensor):
 
     true_y = true_y.cpu().detach().numpy()
 
-    num_values = np.float32(pred_y.shape[0])
+    num_values = np.float32(pred_y_binary.shape[0])
     num_correct = np.sum(pred_y_binary == true_y)
     
     return num_correct / num_values

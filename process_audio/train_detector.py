@@ -14,7 +14,7 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
     save_dir = save_dir + 'detector/'
 
     # Deletes model_data directory
-    if delete_existing_model and os.path.exists(save_dir):
+    if save_model and delete_existing_model and os.path.exists(save_dir):
         user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [y/N] ")
         if user_input.lower() == 'y':
             rmtree(save_dir)
@@ -39,17 +39,18 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
 
     input_size = X_train.shape[1]
     output_size = 1 # Binary output
-    hidden_size = [128, 32, 16] # Hidden layer sizes
-    lr = 0.0005
+    hidden_size = [128, 64, 32] # Hidden layer sizes
+    lr = 0.0025
 
     model = DetectorModel(input_size, hidden_size, output_size).to(device)
     l = nn.BCELoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=0.00001, momentum=0.2)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=0.00001, momentum=0.33)
+    scheduler = torch.optim.lr_scheduler.LinearLR(optimizer)
 
     ## Training model
 
-    torch.manual_seed(1112)
-    np.random.seed(1112)
+    torch.manual_seed(0)
+    np.random.seed(0)
 
 
     train_loss = [None]*epochs
@@ -68,6 +69,7 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
         
         loss.backward()
         optimizer.step()
+        scheduler.step()
         tr_loss = loss.item()
         tr_acc = detector_accuracy(pred, y_train)
 
@@ -86,23 +88,25 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
         if (epoch+1) % 50 == 0 or epoch == 0:
             print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
     
-    if not os.path.exists(save_dir):
+    if save_model and not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
-    # Save transformer models
-    dump_transformers(transformers, dir=save_dir)
+    if save_model:
+        # Save transformer models
+        dump_transformers(transformers, dir=save_dir)
 
-    # Save model layer sizes to file
-    write_model_info(input_size, hidden_size, output_size, dir=save_dir)
+        # Save model layer sizes to file
+        write_model_info(input_size, hidden_size, output_size, dir=save_dir)
 
-    # Save model state dict to file
-    torch.save(model.state_dict(), f'{save_dir}/model.pt')
-    print(f"Successfully saved model with a validation accuracy of {final_acc}% after {epochs} epochs.")
+        # Save model state dict to file
+        torch.save(model.state_dict(), f'{save_dir}/model.pt')
+        print(f"Successfully saved model with a validation accuracy of {final_acc}% after {epochs} epochs.")
 
     trainhist = pd.DataFrame({'train_loss': train_loss, 'train_acc': train_acc,
             'val_loss': val_loss, 'val_acc': val_acc, 'epoch': np.arange(epochs)})
     
-    trainhist.to_csv(save_dir + 'trainhist.csv')
+    if save_model:
+        trainhist.to_csv(save_dir + 'trainhist.csv')
 
     if return_model:
         return model, trainhist
