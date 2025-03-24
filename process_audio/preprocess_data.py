@@ -13,6 +13,7 @@ from deep_learning_functions import load_model, load_transformers, transform_dat
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
 
 SEGMENT_LEN = 0.2 # each segment should be 200ms long
+CHUNK_LEN = 0.06 # Each chunk for the detector should be 60ms long
 
 def load_audio(filename):
     return librosa.load(filename, sr=None)
@@ -133,7 +134,7 @@ def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
     return keystrokes, labels_list
 
 # Indentifies keystrokes using detector model and segments them
-def unlabeled_audio_segmentation(audio, sr=44100, confidence_threshold=0.9):
+def unlabeled_audio_segmentation(audio, sr=44100, confidence_threshold=0.5):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # loads model and transformers
@@ -143,8 +144,8 @@ def unlabeled_audio_segmentation(audio, sr=44100, confidence_threshold=0.9):
     keystrokes = []
     keystroke_length = int(SEGMENT_LEN * sr)
 
-    # iterate over 20ms chunks of audio
-    chunk_size = int(sr * 0.02) # 20ms
+    # iterate over smaller chunks of audio
+    chunk_size = int(sr * CHUNK_LEN)
 
     i = 0
     while i < len(audio):
@@ -175,9 +176,6 @@ def unlabeled_audio_segmentation(audio, sr=44100, confidence_threshold=0.9):
                 keystroke = np.pad(keystroke, (0, diff), 'constant', constant_values=(0))
 
             keystrokes.append(keystroke)
-
-            # skip past part of keystroke
-            #i += chunk_size * 4
         
         # go to next chunk
         i += chunk_size

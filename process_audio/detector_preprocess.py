@@ -3,8 +3,8 @@ import numpy as np
 import os
 from preprocess_data import load_audio, reduce_noise, convert_to_array, scale_features, dim_reduction, one_hot
 
-# 20ms length for each feature
-SEGMENT_LEN = 0.02
+# 60ms length for each segment
+SEGMENT_LEN = 0.06
 
 def read_labels(file_name: str):
     label_file = open(file_name, 'r')
@@ -55,8 +55,8 @@ def detector_audio_segmentation(labels, audio, sr=44100, offset=0.01):
     for event_start in labels:
         event_start = int((event_start / 1000.) * sr) # Change event_start from ms to samples
 
-        # from -offset to offset ms
-        for start_offset in range(offset_ms * -1, offset_ms + 1):
+        # from -offset to offset ms with step 2
+        for start_offset in range(offset_ms * -1, offset_ms + 1, 2):
             start_offset /= 1000.
             offset_samples = int(start_offset * sr)
 
@@ -142,6 +142,8 @@ def preprocess_for_detector(data_dir='data/', init_transformers=True):
         reduced_features, pca = dim_reduction(scaled_features)
 
         return reduced_features, labels, {'scaler': scaler, 'pca': pca}
+    else:
+        return features, labels
 
 def main():
     df = preprocess_for_detector()

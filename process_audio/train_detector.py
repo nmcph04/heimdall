@@ -10,18 +10,22 @@ from models import DetectorModel
 
 def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dict, 
                    data_dir='data', epochs=1_000, return_model=True,
-                   save_model=True, save_dir='model_data/', delete_existing_model=True):
+                   save_model=True, save_dir='model_data/', delete_existing_model=True, auto_rm=False):
     save_dir = save_dir + 'detector/'
 
     # Deletes model_data directory
     if save_model and delete_existing_model and os.path.exists(save_dir):
-        user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [y/N] ")
-        if user_input.lower() == 'y':
-            rmtree(save_dir)
-            print('Directory deleted')
+        if not auto_rm:
+            user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [y/N] ")
+            if user_input.lower() == 'y':
+                rmtree(save_dir)
+                print('Directory deleted')
+            else:
+                print("Files will not be deleted. Exiting program...")
+                exit(0)
         else:
-            print("Files will not be deleted. Exiting program...")
-            exit(0)
+            rmtree(save_dir)
+            print(f'{save_dir} directory deleted')
 
     # Oversample and augment dataset
     X, y = detector_oversample(features, labels)
@@ -40,11 +44,11 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
     input_size = X_train.shape[1]
     output_size = 1 # Binary output
     hidden_size = [128, 64, 32] # Hidden layer sizes
-    lr = 0.0025
+    lr = 0.001
 
     model = DetectorModel(input_size, hidden_size, output_size).to(device)
     l = nn.BCELoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=0.00001, momentum=0.33)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=lr, weight_decay=0.00001, momentum=0.3)
     scheduler = torch.optim.lr_scheduler.LinearLR(optimizer)
 
     ## Training model
