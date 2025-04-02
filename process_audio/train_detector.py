@@ -5,11 +5,11 @@ import torch
 import torch.nn as nn
 import os
 from shutil import rmtree
+from detector_preprocess import preprocess_for_detector
 from deep_learning_functions import *
 from models import DetectorModel
 
-def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dict, 
-                   data_dir='data', epochs=1_000, return_model=True,
+def train_detector(data_dir='data', epochs=1_000, return_model=True,
                    save_model=True, save_dir='model_data/', delete_existing_model=True, auto_rm=False):
     save_dir = save_dir + 'detector/'
 
@@ -26,6 +26,8 @@ def train_detector(features: pd.DataFrame, labels: np.ndarray, transformers: dic
         else:
             rmtree(save_dir)
             print(f'{save_dir} directory deleted')
+
+    features, labels, transformers = preprocess_for_detector(data_dir=data_dir)
 
     # Oversample and augment dataset
     X, y = detector_oversample(features, labels)

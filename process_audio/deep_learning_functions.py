@@ -111,8 +111,8 @@ def dump_transformers(transformers: dict, dir=''):
         path = dump_dir + name + '.pkl'
         dump(transformer, open(path, 'wb'))
 
-def read_model_info(dir='model_data/'):
-    with open(dir + 'model_info.txt', 'r') as file:
+def read_model_info(path='model_data/'):
+    with open(path + 'model_info.txt', 'r') as file:
         input_layer = int(file.readline().strip())
         hidden_layers = [int(x) for x in file.readline().strip().split(',') if x.strip()]
         output_layer = int(file.readline().strip())
@@ -150,14 +150,13 @@ def load_transformers(dir='model_data/classifier/transformer_dumps/'):
 
 # dir is the directory that has both the classifier and detector directories within it
 # Model type must be either 'classifier' or 'detector'
-def load_model(model_type: str, dir='model_data/'):
-    path = dir
+def load_model(model_type: str, path='model_data/'):
     is_classfier = False
     if model_type.lower() == 'classifier':
-        path += 'classifier/'
+        path += '/classifier/'
         is_classfier = True
     elif model_type.lower() == 'detector':
-        path += 'detector/'
+        path += '/detector/'
     else:
         raise Exception(f"model_type is {model_type}, but must be either 'classifier' or 'detector'!")
 
@@ -171,6 +170,29 @@ def load_model(model_type: str, dir='model_data/'):
         model = DetectorModel(input_size, hidden_sizes, output_size).to(device)
 
     model_path = path + 'model.pt'
-    model.load_state_dict(torch.load(model_path, weights_only=True))
+    model.load_state_dict(torch.load(model_path, weights_only=True, map_location=torch.device(device)))
     model.eval()
     return model
+
+# emulates typing the characters in a list, printing out the result
+# characters such as backspace, space, shift are handled
+def emulate_typing(chars: list):
+    shifted = False
+    buffer = []
+
+    for char in chars:
+        if char == 'backspace':
+            if buffer:
+                buffer.pop()
+        elif char == 'space':
+            buffer.append(' ')
+        elif char == 'shift' or char == 'shift_r':
+            shifted = True
+        else:
+            if shifted:
+                buffer.append(char.upper())
+                shifted = False
+            else: 
+                buffer.append(char)
+
+    print(''.join(char for char in buffer))

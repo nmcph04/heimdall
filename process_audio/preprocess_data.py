@@ -134,12 +134,12 @@ def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
     return keystrokes, labels_list
 
 # Indentifies keystrokes using detector model and segments them
-def unlabeled_audio_segmentation(audio, sr=44100, confidence_threshold=0.5):
+def unlabeled_audio_segmentation(audio, detector_path='model_data/', sr=44100, confidence_threshold=0.5):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # loads model and transformers
-    model = load_model('detector')
-    transformers = load_transformers('model_data/detector/transformer_dumps/')
+    model = load_model('detector', path=detector_path)
+    transformers = load_transformers(detector_path + '/detector/transformer_dumps/')
 
     keystrokes = []
     keystroke_length = int(SEGMENT_LEN * sr)
