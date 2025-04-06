@@ -35,11 +35,12 @@ def read_settings():
     if not os.path.exists("settings.json"):
         if not os.path.exists("default_settings.json"):
             raise Exception("default_settings.json is missing!")
-
-        shutil.copyfile('default_settings.json', 'settings.json')
-    else:
-        with open('settings.json') as f:
-            return json.load(f)
+        
+        else:
+            shutil.copyfile('default_settings.json', 'settings.json')
+    
+    with open('settings.json') as f:
+        return json.load(f)
 
 def ui_train(settings: dict):
     while True:
