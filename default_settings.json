@@ -1,0 +1,6 @@
+{
+	"modelPath":"process_audio/model_data",
+	"trainingDataPath":"process_audio/data",
+	"analysisDataPath":"process_audio/data/data1.wav",
+	"confirmDirectoryDeletion":"True"
+}
