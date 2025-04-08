@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.signal import resample
 import pandas as pd
 from imblearn.over_sampling import SMOTE
 import torch
@@ -13,50 +14,90 @@ def detector_oversample(features, labels):
 
 def oversample_dataset(features, labels, encoder):
     # Gets number of unique label elements
-    label_shape = encoder.transform(np.array(labels[0]).reshape(-1, 1)).shape[1]
+    label_shape = labels.shape[1]
 
     # Converts labels to integers for SMOTE to process
-    encoded_labels = list(int(np.argmax(x)) for x in encoder.transform(pd.DataFrame(labels)))
+    encoded_labels = list(int(np.argmax(x)) for x in labels)
 
     oversampler = SMOTE()
     over_X, over_y = oversampler.fit_resample(features, encoded_labels)
 
     # Convert integer labels back into class names
-    zero_array = np.zeros(label_shape)
-    decoded_labels = []
+    zero_array = np.zeros((len(over_y), label_shape))
+    for i, encoded in enumerate(over_y):
+        zero_array[i][encoded] = 1
 
-    for label in over_y:
-        decoded = zero_array.copy()
-        decoded[label] = 1
-        decoded_labels.append(decoded)
+    return np.array(over_X), zero_array
+
+def time_stretch(audio, stretch_factor, target_length=17733):
+    if stretch_factor <= 0:
+        raise ValueError("Stretch factor must be greater than 0")
     
-    class_name_labels = encoder.inverse_transform(np.array(decoded_labels))
+    # Stretch or compress the audio
+    stretched_audio = resample(audio, int(len(audio) / stretch_factor))
+    
+    # Resample to the target length
+    resized_audio = resample(stretched_audio, target_length)
+    return resized_audio
 
-    return np.array(over_X), np.array(class_name_labels)
+
+def pitch_shift(audio, n_steps, sample_rate=44100, target_length=17733):
+    if sample_rate <= 0:
+        raise ValueError("Sample rate must be positive")
+    
+    # Calculate the pitch shift factor
+    pitch_factor = 2 ** (n_steps / 12.0)  # 12 steps = 1 octave
+    
+    # Stretch or compress the audio in time
+    shifted_audio = resample(audio, int(len(audio) / pitch_factor))
+    
+    # Resample back to the target length
+    resized_audio = resample(shifted_audio, target_length)
+    return resized_audio
 
 # Perform data augmentation to increase dataset size
 def augment_data(X: np.ndarray, y: np.ndarray, pct_added: float):
     initial_dataset_size = X.shape[0]
     n_added = int(initial_dataset_size * pct_added - initial_dataset_size)
+    # Number of new samples from each method
+    n_per_method = int(n_added / 3)
 
-    synthesized_X = []
-    synthesized_y = []
+    # Pre-allocate memory for synthesized data
+    synthesized_X = np.empty((n_per_method * 3, X.shape[1]), dtype=X.dtype)
+    synthesized_y = np.empty((n_per_method * 3, y.shape[1]), dtype=y.dtype)
 
     # Generate n random indices from (0, size of dataset]
     rng = np.random.default_rng()
-    random_indices = rng.integers(0, initial_dataset_size, n_added)
+    random_indices = rng.integers(0, initial_dataset_size, (3, n_per_method))
 
-    # add noise to n random samples
-    for idx in random_indices:
+    i = 0
+    # Add noise to n random samples
+    for idx in random_indices[0]:
         # multiplies X values by random number from .8 to 1.2
         noise = (rng.random(X.shape[1]) / 5 - 0.1) * 2 + 1
-        synthesized_X.append(X[idx] * noise)
-        synthesized_y.append(y[idx])
+        synthesized_X[i] = X[idx] * noise
+        synthesized_y[i] = y[idx]
+        i += 1
     
-    synthesized_X = np.array(synthesized_X)
-    synthesized_y = np.array(synthesized_y)
+    # Time stretch/compress n random samples
+    stretch_factor = (rng.random(n_per_method) / 5 - 0.1) * 2 + 1
+    for j, idx in enumerate(random_indices[1]):
+        # stretches X values by a factor .8x to 1.2x
+        print(j, stretch_factor[j])
+        synthesized_X[i] = time_stretch(X[idx], stretch_factor[j])
+        synthesized_y[i] = y[idx]
+        i += 1
+
+    # Pitch shift n random samples
+    shift_factor = (rng.random(n_per_method) / 5 - 0.1) * 2 + 1
+    for j, idx in enumerate(random_indices[2]):
+        # shifts pitch of X values by .8x to 1.2x
+        synthesized_X[i] = pitch_shift(X[idx], shift_factor[j])
+        synthesized_y[i] = y[idx]
+        i += 1
     
-    return np.append(X, synthesized_X, axis=0), np.append(y, synthesized_y, axis=0)
+    
+    return np.concatenate((X, synthesized_X), axis=0), np.concatenate((y, synthesized_y), axis=0)
 
 # Decodes binary labels encoded with one-hot encoding
 def decode_binary_label(label:np.ndarray, threshold=0.9):
@@ -188,6 +229,8 @@ def emulate_typing(chars: list):
             buffer.append(' ')
         elif char == 'shift' or char == 'shift_r':
             shifted = True
+        elif char == 'enter':
+            buffer.append('\n')
         else:
             if shifted:
                 buffer.append(char.upper())

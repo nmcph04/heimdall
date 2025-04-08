@@ -37,7 +37,7 @@ def load_data(label_file="labels.tsv", audio_file="audio.wav"):
     return cleaned_audio, key_events, sample_rate
 
 # offset: will also use +-x seconds from event_start as positive samples 
-#   must be less than segment length (20ms by default)
+#   must be less than segment length (60ms by default)
 #   should be less than or equal to half of segment length
 def detector_audio_segmentation(labels, audio, sr=44100, offset=0.01):
     samples = []
@@ -54,21 +54,10 @@ def detector_audio_segmentation(labels, audio, sr=44100, offset=0.01):
     # Get positive samples
     for event_start in labels:
         event_start = int((event_start / 1000.) * sr) # Change event_start from ms to samples
+        end = min(event_start + sample_length, audio_len)
 
-        # from -offset to offset ms with step 2
-        for start_offset in range(offset_ms * -1, offset_ms + 1, 2):
-            start_offset /= 1000.
-            offset_samples = int(start_offset * sr)
-
-            start = event_start + offset_samples
-            if event_start < 0:
-                continue
-
-            # limits end of sample to end of audio
-            end = min(start + sample_length, audio_len)
-
-            samples.append(audio[start:end])
-            labels_list.append(1)
+        samples.append(audio[event_start:end])
+        labels_list.append(1)
 
         # add offset range to list so they can be skipped for negative samples
         offset_range_start = int(event_start - (offset_ms * -1 / 1000.))
