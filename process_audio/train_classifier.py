@@ -83,6 +83,9 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
     train_acc = [None]*epochs
     val_acc = [None]*epochs
     final_acc = 0.
+    not_improved_n = 0 # How many epochs in a row the test loss has not improved
+
+    EARLY_STOPPING_N = 10
 
     for epoch in range(epochs):
         model.train()
@@ -112,8 +115,16 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         train_acc[epoch] = tr_acc
         val_acc[epoch] = te_acc
         final_acc = int(te_acc * 100)
-        if (epoch+1) % 100 == 0 or epoch == 0:
+        if (epoch+1) % 10 == 0 or epoch == 0:
             print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - train acc: {tr_acc:.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
+        
+        if epoch > 1 and val_loss[epoch] >= val_loss[epoch - 1]:
+            not_improved_n += 1
+            if not_improved_n >= EARLY_STOPPING_N:
+                print(f"Model has not improved for {EARLY_STOPPING_N} epochs. Stopping early at epoch {epoch+1}...")
+                break
+        else:
+            not_improved_n = 0
     
     if save_model and not os.path.exists(save_dir):
         os.makedirs(save_dir)

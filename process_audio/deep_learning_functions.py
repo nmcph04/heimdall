@@ -83,7 +83,6 @@ def augment_data(X: np.ndarray, y: np.ndarray, pct_added: float):
     stretch_factor = (rng.random(n_per_method) / 5 - 0.1) * 2 + 1
     for j, idx in enumerate(random_indices[1]):
         # stretches X values by a factor .8x to 1.2x
-        print(j, stretch_factor[j])
         synthesized_X[i] = time_stretch(X[idx], stretch_factor[j])
         synthesized_y[i] = y[idx]
         i += 1
