@@ -1,36 +1,7 @@
 import numpy as np
 import torch
 from deep_learning_functions import load_model, load_transformers, transform_data, emulate_typing
-from preprocess_data import load_data, unlabeled_audio_segmentation, convert_to_array
-
-def naive_segmentation(audio: np.ndarray, sr=44100, seg_len=0.2, step=60):
-    seg = []
-    sample_length = int(seg_len * sr)
-    silent_num = 0
-    for i in range(0, len(audio), step):
-        segment = audio[i: i + sample_length]
-
-        if is_quiet(segment, 0.0005):
-            silent_num += 1
-            if silent_num > 50:
-                continue
-        elif silent_num != 0:
-            silent_num = 0
-
-
-        if len(segment) != sample_length:
-            pad_amt = sample_length - len(segment)
-            segment = np.pad(segment, (0, pad_amt), 'constant', constant_values=(0))
-
-        seg.append(segment)
-    
-    return np.array(seg)
-
-def is_quiet(chunk: list, threshold: float) -> bool:
-    if np.max(np.abs(chunk)) < threshold:
-        return True
-    else:
-        return False
+from preprocess_data import load_data, convert_to_array, naive_segmentation
 
 # Filters predictions so that one character isn't predicted more than twice in a row
 def filter_predictions(pred: str) -> list:
@@ -61,10 +32,10 @@ def filter_by_confidence(predictions: np.ndarray, confidence=0.6) -> np.ndarray:
 def analyze_audio(audio_file: str, models_path='model_data/'):
     print("Loading data...", end='', flush=True)
     # Load model
-    classifier = load_model('classifier', path=models_path)
+    classifier = load_model(path=models_path)
 
     # Load transformers
-    transformers = load_transformers(models_path + '/classifier/transformer_dumps/')
+    transformers = load_transformers(models_path + '/transformer_dumps/')
 
     # Load audio
     audio, _, sr = load_data(label_file=None, audio_file=audio_file)

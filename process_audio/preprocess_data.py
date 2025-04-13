@@ -13,7 +13,6 @@ from deep_learning_functions import load_model, load_transformers, transform_dat
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
 
 SEGMENT_LEN = 0.2 # each segment should be 200ms long
-CHUNK_LEN = 0.06 # Each chunk for the detector should be 60ms long
 
 def load_audio(filename):
     return librosa.load(filename, sr=None)
@@ -133,54 +132,37 @@ def labeled_audio_segmentation(labels, audio, sr=44100, ms_pad=20):
 
     return keystrokes, labels_list
 
-# Indentifies keystrokes using detector model and segments them
-def unlabeled_audio_segmentation(audio, detector_path='model_data/', sr=44100, confidence_threshold=0.5):
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+# Segments audio into equal length chunks, moving 'step' samples forward every time
+def naive_segmentation(audio: np.ndarray, sr=44100, seg_len=0.2, step=60):
+    seg = []
+    sample_length = int(seg_len * sr)
+    silent_num = 0
+    for i in range(0, len(audio), step):
+        segment = audio[i: i + sample_length]
 
-    # loads model and transformers
-    model = load_model('detector', path=detector_path)
-    transformers = load_transformers(detector_path + '/detector/transformer_dumps/')
+        if is_quiet(segment, 0.0005):
+            silent_num += 1
+            if silent_num > 50:
+                continue
+        elif silent_num != 0:
+            silent_num = 0
 
-    keystrokes = []
-    keystroke_length = int(SEGMENT_LEN * sr)
 
-    # iterate over smaller chunks of audio
-    chunk_size = int(sr * CHUNK_LEN)
+        if len(segment) != sample_length:
+            pad_amt = sample_length - len(segment)
+            segment = np.pad(segment, (0, pad_amt), 'constant', constant_values=(0))
 
-    i = 0
-    while i < len(audio):
-        chunk_end = min(i + chunk_size, len(audio))
-        chunk = audio[i:chunk_end]
+        seg.append(segment)
+    
+    return np.array(seg)
 
-        # pad chunk if it's on the end of the file
-        if len(chunk) < chunk_size:
-            diff = chunk_size - len(chunk)
-            chunk = np.pad(chunk, (0, diff), 'constant', constant_values=(0))
 
-        # transform chunk
-        chunk_array = convert_to_array([chunk], n_fft=64)
-        transformed_chunk, _ = transform_data(chunk_array, None, transformers)
+def is_quiet(chunk: list, threshold: float) -> bool:
+    if np.max(np.abs(chunk)) < threshold:
+        return True
+    else:
+        return False
 
-        # run detector on chunk
-        # TODO batch chunks before running model on them
-        pred = model(torch.tensor(transformed_chunk.astype(np.float32)).to(device)).cpu().detach().numpy()
-        # only considers it positive if the model confidence is over the threshold
-        pred_int = (pred >= confidence_threshold)
-        if pred_int == 1:
-            # get keystroke segment (200ms)
-            keystroke = audio[i:i + keystroke_length]
-
-            # pad keystrokes
-            if len(keystroke) != keystroke_length:
-                diff = keystroke_length - len(keystroke)
-                keystroke = np.pad(keystroke, (0, diff), 'constant', constant_values=(0))
-
-            keystrokes.append(keystroke)
-        
-        # go to next chunk
-        i += chunk_size
-        
-    return keystrokes
 
 def extract_features(keystroke, n_fft):
     D = librosa.stft(keystroke, n_fft=n_fft)
@@ -238,9 +220,9 @@ def reduce_small_classes(labels, threshold=10):
     
     return np.array(reduced_labels)
 
-def preprocess_data(data_dir='data', labeled=True):
+def preprocess_data(data_dir='data'):
     base_names = []
-    extensions = ['.txt', '.wav'] if labeled else ['.wav']
+    extensions = ['.txt', '.wav']
     filenames = os.listdir(data_dir)
 
     for file in filenames:
@@ -257,36 +239,23 @@ def preprocess_data(data_dir='data', labeled=True):
         label_file = data_dir + '/' + base + '.tsv'
         audio_file = data_dir + '/' + base + '.wav'
 
-        if labeled:
-            audio, labels, sr = load_data(label_file, audio_file)
-            segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
+        audio, labels, sr = load_data(label_file, audio_file)
+        segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
 
-            key_df = pd.DataFrame(convert_to_array(segmented_audio))
-            key_df['label'] = seg_labels
+        key_df = pd.DataFrame(convert_to_array(segmented_audio))
+        key_df['label'] = seg_labels
 
-            dataframe = pd.concat([dataframe, key_df], ignore_index=True)
+        dataframe = pd.concat([dataframe, key_df], ignore_index=True)
         
-        else:
-            audio, _, sr = load_data(label_file=None, audio_file=audio_file)
-            segmented_audio = unlabeled_audio_segmentation(audio, sr)
-
-            key_df = pd.DataFrame(convert_to_array(segmented_audio))
-            dataframe = pd.concat([dataframe, key_df], ignore_index=True)
         print(" Finished.", flush=True)
 
-    if labeled:
-        features = np.array(dataframe.drop('label', axis=1))
-        labels = np.array(dataframe['label'])
-        labels = reduce_small_classes(labels)
-    else:
-        features = dataframe
+    features = np.array(dataframe.drop('label', axis=1))
+    labels = np.array(dataframe['label'])
+    labels = reduce_small_classes(labels)
 
-    if labeled:
-        ohe = one_hot(labels)
+    ohe = one_hot(labels)
 
-        return features, labels, {'encoder': ohe}
-    else:
-        return features, None, None
+    return features, labels, {'encoder': ohe}
 
 
 def main():
