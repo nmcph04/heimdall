@@ -11,7 +11,7 @@ from preprocess_data import preprocess_data
 from deep_learning_functions import *
 from models import ClassificationModel
 
-def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=True, save_dir='model_data/classifier/', delete_existing_model=True):
+def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=True, save_dir='model_data/', delete_existing_model=True):
 
     # Deletes model_data directory
     if save_model and delete_existing_model and os.path.exists(save_dir):
@@ -31,7 +31,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
     X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=1)
 
     # Oversample and augment training dataset
-    X_train, y_train = oversample_dataset(X_train, y_train, transformers['encoder'])
+    X_train, y_train = oversample_dataset(X_train, y_train)
     X_train, y_train = augment_data(X_train, y_train, 3.)
 
     # Scale and reduce dimensionality of dataset
@@ -121,7 +121,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         if epoch > 1 and val_loss[epoch] >= val_loss[epoch - 1]:
             not_improved_n += 1
             if not_improved_n >= EARLY_STOPPING_N:
-                print(f"Model has not improved for {EARLY_STOPPING_N} epochs. Stopping early at epoch {epoch+1}...")
+                print(f"Model has not improved for {EARLY_STOPPING_N} epochs. Stopping early at epoch {epoch+1} with an accuracy of {final_acc}%...")
                 break
         else:
             not_improved_n = 0

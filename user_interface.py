@@ -3,7 +3,6 @@ import os
 import time
 import json
 import shutil
-from process_audio.train_detector import train_detector
 from process_audio.train_classifier import train_model
 from process_audio.analyze_audio import analyze_audio
 
@@ -43,74 +42,33 @@ def read_settings():
         return json.load(f)
 
 def ui_train(settings: dict):
-    while True:
-        clear_screen()
-        print(f"{"Heimdall Training" :^{UI_WIDTH}}")
-        print('-'*UI_WIDTH)
-        print('')
-
-        print(f"{"1) Train Detector     " :^{UI_WIDTH}}")
-        print(f"{"2) Train Classifier   " :^{UI_WIDTH}}")
-        print(f"{"3) Return to Main Menu" :^{UI_WIDTH}}")
-
-        print('')
-        print('-'*UI_WIDTH)
-
-        user_input = input_validation(1, 3)
-
-        if user_input == 1:
-            # Confirm settings, data paths, etc. Then run the detector training
-            print(f"{"Confirm the following settings:" :^{UI_WIDTH}}")
-
-            model_dir = settings['modelPath'] + '/detector/'
-            print(f"{f"Detector model path: {model_dir}" :^{UI_WIDTH}}")
-
-            print(f"{f"Confirm directory deletion: {settings['confirmDirectoryDeletion']}" :^{UI_WIDTH}}")
-
-            data_dir = settings['trainingDataPath']
-            print(f"{f"Training data path: {settings['trainingDataPath']}" :^{UI_WIDTH}}")
-
-            user_confirm = input("Confirm these settings [y/N] ")
-
-            if user_confirm != 'y':
-                print(f"{"Settings not confirmed. Going back..." :^{UI_WIDTH}}")
-                time.sleep(1)
-                continue
-
-            print("Training detector...")
-
-            train_detector(data_dir=data_dir, return_model=False, save_dir=model_dir)
-
-            input("Detector training complete! Press enter to continue: ")
-                
-
-        elif user_input == 2:
-            # Confirm settings, data paths, etc. Then run the classifier training
-            print(f"{"Confirm the following settings:" :^{UI_WIDTH}}")
-
-            model_dir = settings['modelPath'] + '/classifier/'
-            print(f"{f"Classifier model path: {model_dir}" :^{UI_WIDTH}}")
-
-            print(f"{f"Confirm directory deletion: {settings['confirmDirectoryDeletion']}" :^{UI_WIDTH}}")
-
-            data_dir = settings['trainingDataPath']
-            print(f"{f"Training data path: {data_dir}" :^{UI_WIDTH}}")
-
-            user_confirm = input("Confirm these settings [y/N] ")
-
-            if user_confirm != 'y':
-                print(f"{"Settings not confirmed. Going back..." :^{UI_WIDTH}}")
-                time.sleep(1)
-                continue
-
-            print("Training classifier...")
-
-            train_model(data_dir=data_dir, return_model=False, save_dir=model_dir)
-
-            input("Classifier training complete! Press enter to continue: ")
-
-        else:
-            return
+    clear_screen()
+    print(f"{"Heimdall Training" :^{UI_WIDTH}}")
+    print('-'*UI_WIDTH)
+    # Confirm settings, data paths, etc. Then run the classifier training
+    print(f"{"Confirm the following settings:" :^{UI_WIDTH}}")
+    
+    model_dir = settings['modelPath']
+    print(f"{f"Model path: {model_dir}" :^{UI_WIDTH}}")
+    
+    print(f"{f"Confirm directory deletion: {settings['confirmDirectoryDeletion']}" :^{UI_WIDTH}}")
+    
+    data_dir = settings['trainingDataPath']
+    print(f"{f"Training data path: {data_dir}" :^{UI_WIDTH}}")
+    
+    user_confirm = input("Confirm these settings [y/N] ")
+    
+    if user_confirm != 'y':
+        print(f"{"Settings not confirmed. Going back..." :^{UI_WIDTH}}")
+        time.sleep(1)
+        return
+    
+    print("Training classification model...")
+    
+    train_model(data_dir=data_dir, return_model=False, save_dir=model_dir, save_model=False)
+    
+    input("Model training complete! Press enter to continue: ")
+    return
 
 
 
@@ -169,7 +127,7 @@ def ui():
         print('')
 
         # Print options
-        print(f"{"1) Train models" :^{UI_WIDTH}}")
+        print(f"{"1) Train model " :^{UI_WIDTH}}")
         print(f"{"2) Run analysis" :^{UI_WIDTH}}")
         print(f"{"3) Settings    " :^{UI_WIDTH}}")
         print(f"{"4) Exit        " :^{UI_WIDTH}}")
