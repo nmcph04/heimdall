@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 import torch
 import torch.nn as nn
 import os
@@ -13,7 +15,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
 
     # Deletes model_data directory
     if save_model and delete_existing_model and os.path.exists(save_dir):
-        user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [Y/n] ")
+        user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [y/N] ")
         if user_input.lower() == 'y':
             rmtree(save_dir)
             print('Directory deleted')
@@ -22,12 +24,35 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
             exit(0)
 
     features, labels, transformers = preprocess_data(data_dir=data_dir)
+    print("Data loading complete!")
 
-    # Oversample and augment dataset
-    X, y = oversample_dataset(features.to_numpy(), labels, transformers['encoder'])
-    X, y = augment_data(X, y, 3.)
-    y = transformers['encoder'].transform(y.reshape(-1, 1))
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
+    # Split dataset
+    labels = transformers['encoder'].transform(labels.reshape(-1, 1))
+    X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=1)
+
+    # Oversample and augment training dataset
+    X_train, y_train = oversample_dataset(X_train, y_train, transformers['encoder'])
+    X_train, y_train = augment_data(X_train, y_train, 3.)
+
+    # Scale and reduce dimensionality of dataset
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+    
+    pca = PCA(n_components=128)
+    X_train = pca.fit_transform(X_train)
+    X_test = pca.transform(X_test)
+
+    transformers['scaler'] = scaler
+    transformers['pca'] = pca
+
+    # Shuffle training data
+    indices = np.arange(features.shape[0])
+    np.random.shuffle(indices)
+
+    X_train = X_train[indices]
+    y_train = y_train[indices]
+
 
     # Uses GPU if available, otherwise uses CPU
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -40,11 +65,11 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
 
     input_size = X_train.shape[1]
     output_size = y_train.shape[1]
-    hidden_size = [256, 128, 64] # Hidden layer sizes
+    hidden_sizes = [512, 256, 128] # Hidden layer sizes
 
-    model = ClassificationModel(input_size, hidden_size, output_size).to(device)
+    model = ClassificationModel(input_size, hidden_sizes, output_size).to(device)
     l = nn.CrossEntropyLoss()
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=0.0012, weight_decay=0.00001, momentum=0.3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=3e-4)
 
     ## Training model
 
@@ -58,6 +83,9 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
     train_acc = [None]*epochs
     val_acc = [None]*epochs
     final_acc = 0.
+    not_improved_n = 0 # How many epochs in a row the test loss has not improved
+
+    EARLY_STOPPING_N = 10
 
     for epoch in range(epochs):
         model.train()
@@ -68,22 +96,35 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         loss.backward()
         optimizer.step()
         tr_loss = loss.item()
-        tr_acc = getAcc(pred, y_train)
+
+        predictions = torch.argmax(pred, dim=1)
+        truth = torch.argmax(y_train, dim=1)
+        tr_acc = (predictions == truth).float().mean().cpu()
 
         model.eval()
 
         pred = model(X_test)
         te_loss = l(pred, y_test).item()
-        te_acc = getAcc(pred, y_test)
 
+        predictions = torch.argmax(pred, dim=1)
+        truth = torch.argmax(y_test, dim=1)
+        te_acc = (predictions == truth).float().mean().cpu()
 
         train_loss[epoch] = tr_loss
         val_loss[epoch] = te_loss
         train_acc[epoch] = tr_acc
         val_acc[epoch] = te_acc
         final_acc = int(te_acc * 100)
-        if (epoch+1) % 100 == 0 or epoch == 0:
-            print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
+        if (epoch+1) % 10 == 0 or epoch == 0:
+            print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - train acc: {tr_acc:.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
+        
+        if epoch > 1 and val_loss[epoch] >= val_loss[epoch - 1]:
+            not_improved_n += 1
+            if not_improved_n >= EARLY_STOPPING_N:
+                print(f"Model has not improved for {EARLY_STOPPING_N} epochs. Stopping early at epoch {epoch+1}...")
+                break
+        else:
+            not_improved_n = 0
     
     if save_model and not os.path.exists(save_dir):
         os.makedirs(save_dir)
@@ -93,7 +134,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         dump_transformers(transformers, dir=save_dir)
 
         # Save model layer sizes to file
-        write_model_info(input_size, hidden_size, output_size, dir=save_dir)
+        write_model_info(input_size, hidden_sizes, output_size, dir=save_dir)
 
         # Save model state dict to file
         torch.save(model.state_dict(), f'{save_dir}/model.pt')

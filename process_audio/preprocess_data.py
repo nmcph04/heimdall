@@ -253,7 +253,7 @@ def preprocess_data(data_dir='data', labeled=True):
     dataframe = pd.DataFrame()
 
     for base in base_names:
-        print(f'Processing {base} file(s)...', end='')
+        print(f'Processing {base} file(s)...', end='', flush=True)
         label_file = data_dir + '/' + base + '.tsv'
         audio_file = data_dir + '/' + base + '.wav'
 
@@ -272,29 +272,20 @@ def preprocess_data(data_dir='data', labeled=True):
 
             key_df = pd.DataFrame(convert_to_array(segmented_audio))
             dataframe = pd.concat([dataframe, key_df], ignore_index=True)
-        print(" Finished.")
+        print(" Finished.", flush=True)
 
     if labeled:
-        features = dataframe.drop('label', axis=1)
-        labels = dataframe['label']
+        features = np.array(dataframe.drop('label', axis=1))
+        labels = np.array(dataframe['label'])
         labels = reduce_small_classes(labels)
     else:
         features = dataframe
 
     if labeled:
-        scaled_features, scaler = scale_features(features)
-        reduced_features, pca = dim_reduction(scaled_features)
-
         ohe = one_hot(labels)
 
-        processed_df = pd.DataFrame(reduced_features)
-
-        pp_data = processed_df.assign(label=labels)
-        pp_data.to_csv('pp_data.csv', header=True, index=False)
-
-        return processed_df, labels, {'scaler': scaler, 'pca': pca, 'encoder': ohe}
+        return features, labels, {'encoder': ohe}
     else:
-        # TODO add transforming of audio data using saved model here
         return features, None, None
 
 
