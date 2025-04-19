@@ -245,7 +245,7 @@ def load_largest_file(path: str, base_names: list):
 
     # Oversample and augment training dataset
     X_train, y_train = oversample_dataset(X_train, y_train)
-    X_train, y_train = augment_data(X_train, y_train, 3.)
+    X_train, y_train = augment_data(X_train, y_train, 4.)
 
     # Scale and reduce dimensionality of dataset
     scaler = StandardScaler()
@@ -293,7 +293,7 @@ def transform_data(features, labels, transformers: dict):
 
     # Oversample and augment training dataset
     X_train, y_train = oversample_dataset(X_train, y_train)
-    X_train, y_train = augment_data(X_train, y_train, 3.)
+    X_train, y_train = augment_data(X_train, y_train, 6.)
 
     # Scale and reduce dimensionality of dataset
     X_train = transformers['scaler'].transform(X_train)
@@ -322,6 +322,7 @@ def preprocess_data(data_dir='data/'):
         # Appends file base name to base_names if it has one of the two extensions and is not already in base_names
         if ext in extensions and base not in base_names:
             base_names.append(base)
+    base_names.sort()
 
     # Loads largest file and fits transformers with it
     X_train, X_test, y_train, y_test, transformers = load_largest_file(data_dir, base_names)
