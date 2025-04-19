@@ -8,16 +8,25 @@ from preprocess_data import preprocess_data
 from deep_learning_functions import *
 from models import ClassificationModel
 
-# Returns True if the current loss is less than the mean of the previous epochs in range
-def no_improvement(history: list, curr_epoch: int, early_stop_n: int) -> bool:
-    if curr_epoch < early_stop_n-1:
-        return False
-    curr_loss = history[curr_epoch]
-    past_loss = history[(curr_epoch - early_stop_n-1):curr_epoch+1]
-    if curr_loss >= np.mean(past_loss):
-        return True
-    else:
-        return False
+class EarlyStopping():
+    def __init__(self, patience=5, n_epochs=100):
+        self.patience = patience
+        self.curr_patience = 0
+        self.n_epochs = n_epochs
+    
+    def over_patience(self) -> bool:
+        return self.curr_patience >= self.patience 
+    
+    # Increments curr_patience if the current loss is less than the mean of the previous epochs in range
+    def step(self, history: list, curr_epoch: int):
+        if curr_epoch < self.n_epochs-1:
+            self.curr_patience = 0
+        curr_loss = history[curr_epoch]
+        past_loss = history[(curr_epoch - self.n_epochs-1):curr_epoch+1]
+        if curr_loss >= np.mean(past_loss):
+            self.curr_patience += 1
+        else:
+            self.curr_patience = 0
 
 def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=True, save_dir='model_data/', delete_existing_model=True):
 
@@ -25,8 +34,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
     if save_model and delete_existing_model and os.path.exists(save_dir):
         user_input = input(f"Warning: All files in {save_dir} will be deleted! Are you sure that you want to continue? [y/N] ")
         if user_input.lower() == 'y':
-            rmtree(save_dir)
-            print('Directory deleted')
+            print("Directory will be deleted after training is completed.")
         else:
             print("Files will not be deleted. Exiting program...")
             exit(0)
@@ -45,17 +53,15 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
 
     input_size = X_train.shape[1]
     output_size = y_train.shape[1]
-    hidden_sizes = [512, 256, 128] # Hidden layer sizes
+    hidden_sizes = [512, 512, 256] # Hidden layer sizes
 
     model = ClassificationModel(input_size, hidden_sizes, output_size).to(device)
     l = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=3e-4)
 
     ## Training model
-
-    torch.manual_seed(1112)
-    np.random.seed(1112)
-
+    torch.manual_seed(1)
+    np.random.seed(1)
 
     train_loss = [None]*epochs
     val_loss = [None]*epochs
@@ -64,7 +70,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
     val_acc = [None]*epochs
     final_acc = 0.
 
-    EARLY_STOPPING_N = 40
+    early_stop = EarlyStopping(patience=5, n_epochs=50)
 
     for epoch in range(epochs):
         model.train()
@@ -94,17 +100,23 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         train_acc[epoch] = tr_acc
         val_acc[epoch] = te_acc
         final_acc = int(te_acc * 100)
+
+        early_stop.step(val_loss, epoch)
+        
         #if (epoch+1) % 10 == 0 or epoch == 0:
         print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - train acc: {tr_acc:.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
         
-        if epoch > 1 and no_improvement(val_loss, epoch, EARLY_STOPPING_N):
-            print(f"Model has not improved for {EARLY_STOPPING_N} epochs. Stopping early at epoch {epoch+1} with an accuracy of {final_acc}%...")
+        # If there has been no improvement for at least 'patience' epochs
+        if early_stop.over_patience():
+            print(f"Stopping early at epoch {epoch+1} with a validation accuracy of {final_acc}%...")
             break
-    
-    if save_model and not os.path.exists(save_dir):
-        os.makedirs(save_dir)
 
     if save_model:
+        # Delete directory and make a new one
+        rmtree(save_dir)
+        print('Directory deleted')
+        os.makedirs(save_dir)
+
         # Save transformer models
         dump_transformers(transformers, dir=save_dir)
 
@@ -113,7 +125,7 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
 
         # Save model state dict to file
         torch.save(model.state_dict(), f'{save_dir}/model.pt')
-        print(f"Successfully saved model with a validation accuracy of {final_acc}% after {epochs} epochs.")
+        print(f"Successfully saved model with a validation accuracy of {final_acc}%.")
 
     trainhist = pd.DataFrame({'train_loss': train_loss, 'train_acc': train_acc,
             'val_loss': val_loss, 'val_acc': val_acc, 'epoch': np.arange(epochs)})

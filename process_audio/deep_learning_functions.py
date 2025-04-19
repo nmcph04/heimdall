@@ -79,24 +79,24 @@ def augment_data(X: np.ndarray, y: np.ndarray, pct_added: float):
     i = 0
     # Add noise to n random samples
     for idx in random_indices[0]:
-        # multiplies X values by random number from .8 to 1.2
-        noise = (rng.random(X.shape[1]) / 5 - 0.1) * 2 + 1
+        # multiplies X values by random number from 0.5 to 1.5
+        noise = (rng.random(X.shape[1]) + 0.5)
         synthesized_X[i] = X[idx] * noise
         synthesized_y[i] = y[idx]
         i += 1
     
     # Time stretch/compress n random samples
-    stretch_factor = (rng.random(n_per_method) / 5 - 0.1) * 2 + 1
+    stretch_factor = (rng.random(n_per_method) + 0.5)
     for j, idx in enumerate(random_indices[1]):
-        # stretches X values by a factor .8x to 1.2x
+        # stretches X values by a factor 0.5x to 1.5x
         synthesized_X[i] = time_stretch(X[idx], stretch_factor[j])
         synthesized_y[i] = y[idx]
         i += 1
 
     # Pitch shift n random samples
-    shift_factor = (rng.random(n_per_method) / 5 - 0.1) * 2 + 1
+    shift_factor = (rng.random(n_per_method) / + 0.5)
     for j, idx in enumerate(random_indices[2]):
-        # shifts pitch of X values by .8x to 1.2x
+        # shifts pitch of X values by 0.5x to 1.5x
         synthesized_X[i] = pitch_shift(X[idx], shift_factor[j])
         synthesized_y[i] = y[idx]
         i += 1
