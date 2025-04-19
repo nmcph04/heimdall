@@ -65,7 +65,7 @@ def ui_train(settings: dict):
     
     print("Training classification model...")
     
-    train_model(data_dir=data_dir, return_model=False, save_dir=model_dir, save_model=False)
+    train_model(data_dir=data_dir, return_model=False, save_dir=model_dir)
     
     input("Model training complete! Press enter to continue: ")
     return

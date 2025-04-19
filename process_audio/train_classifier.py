@@ -1,8 +1,5 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
 import torch
 import torch.nn as nn
 import os
@@ -10,6 +7,17 @@ from shutil import rmtree
 from preprocess_data import preprocess_data
 from deep_learning_functions import *
 from models import ClassificationModel
+
+# Returns True if the current loss is less than the mean of the previous epochs in range
+def no_improvement(history: list, curr_epoch: int, early_stop_n: int) -> bool:
+    if curr_epoch < early_stop_n-1:
+        return False
+    curr_loss = history[curr_epoch]
+    past_loss = history[(curr_epoch - early_stop_n-1):curr_epoch+1]
+    if curr_loss >= np.mean(past_loss):
+        return True
+    else:
+        return False
 
 def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=True, save_dir='model_data/', delete_existing_model=True):
 
@@ -23,36 +31,8 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
             print("Files will not be deleted. Exiting program...")
             exit(0)
 
-    features, labels, transformers = preprocess_data(data_dir=data_dir)
+    X_train, X_test, y_train, y_test, transformers = preprocess_data(data_dir=data_dir)
     print("Data loading complete!")
-
-    # Split dataset
-    labels = transformers['encoder'].transform(labels.reshape(-1, 1))
-    X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size=0.2, random_state=1)
-
-    # Oversample and augment training dataset
-    X_train, y_train = oversample_dataset(X_train, y_train)
-    X_train, y_train = augment_data(X_train, y_train, 3.)
-
-    # Scale and reduce dimensionality of dataset
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-    
-    pca = PCA(n_components=128)
-    X_train = pca.fit_transform(X_train)
-    X_test = pca.transform(X_test)
-
-    transformers['scaler'] = scaler
-    transformers['pca'] = pca
-
-    # Shuffle training data
-    indices = np.arange(features.shape[0])
-    np.random.shuffle(indices)
-
-    X_train = X_train[indices]
-    y_train = y_train[indices]
-
 
     # Uses GPU if available, otherwise uses CPU
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -83,9 +63,8 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
     train_acc = [None]*epochs
     val_acc = [None]*epochs
     final_acc = 0.
-    not_improved_n = 0 # How many epochs in a row the test loss has not improved
 
-    EARLY_STOPPING_N = 10
+    EARLY_STOPPING_N = 40
 
     for epoch in range(epochs):
         model.train()
@@ -115,16 +94,12 @@ def train_model(data_dir='data', epochs=5_000, return_model=True, save_model=Tru
         train_acc[epoch] = tr_acc
         val_acc[epoch] = te_acc
         final_acc = int(te_acc * 100)
-        if (epoch+1) % 10 == 0 or epoch == 0:
-            print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - train acc: {tr_acc:.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
+        #if (epoch+1) % 10 == 0 or epoch == 0:
+        print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - train acc: {tr_acc:.4f} - val loss: {te_loss :.4f} - val acc: {te_acc:.4f}')
         
-        if epoch > 1 and val_loss[epoch] >= val_loss[epoch - 1]:
-            not_improved_n += 1
-            if not_improved_n >= EARLY_STOPPING_N:
-                print(f"Model has not improved for {EARLY_STOPPING_N} epochs. Stopping early at epoch {epoch+1} with an accuracy of {final_acc}%...")
-                break
-        else:
-            not_improved_n = 0
+        if epoch > 1 and no_improvement(val_loss, epoch, EARLY_STOPPING_N):
+            print(f"Model has not improved for {EARLY_STOPPING_N} epochs. Stopping early at epoch {epoch+1} with an accuracy of {final_acc}%...")
+            break
     
     if save_model and not os.path.exists(save_dir):
         os.makedirs(save_dir)

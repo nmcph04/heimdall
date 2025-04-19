@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import resample
 import pandas as pd
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTE, RandomOverSampler
 import torch
 import os
 from pickle import dump, load
@@ -15,15 +15,25 @@ def oversample_dataset(features, labels):
     # Converts labels to integers for SMOTE to process
     encoded_labels = list(int(np.argmax(x)) for x in labels)
 
-    oversampler = SMOTE()
-    over_X, over_y = oversampler.fit_resample(features, encoded_labels)
+    # Uses random oversampling so that all classes have at least 10 samples
+    at_least_ten = {}
+    elements, element_counts = np.unique(encoded_labels, return_counts=True)
+    for k, v in zip(elements, element_counts):
+        at_least_ten[int(k)] = max(10, int(v))
+
+    ros = RandomOverSampler(sampling_strategy=at_least_ten)
+    over_X, over_y = ros.fit_resample(features, encoded_labels)
+
+    # Uses SMOTE to finish the oversampling
+    smote = SMOTE(sampling_strategy='not majority')
+    over_X, over_y = smote.fit_resample(over_X, over_y)
 
     # Convert integer labels back into class names
     zero_array = np.zeros((len(over_y), label_shape))
     for i, encoded in enumerate(over_y):
         zero_array[i][encoded] = 1
 
-    return np.array(over_X), zero_array
+    return over_X, zero_array
 
 def time_stretch(audio, stretch_factor, target_length=17733):
     if stretch_factor <= 0:

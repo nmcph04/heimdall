@@ -3,12 +3,12 @@ import numpy as np
 import noisereduce as nr
 import os
 import re
-from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import OneHotEncoder
 import librosa
 import torch
-from deep_learning_functions import load_model, load_transformers, transform_data, decode_binary_label
+from deep_learning_functions import oversample_dataset, augment_data
 
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
 
@@ -177,7 +177,7 @@ def convert_to_array(list_of_keys: list, n_fft=512):
         key_array = np.array(key)
         list_of_arrays.append(extract_features(key_array, n_fft))
 
-    return list_of_arrays
+    return np.array(list_of_arrays)
 
 def scale_features(data: pd.DataFrame):
     sc = StandardScaler()
@@ -194,9 +194,9 @@ def dim_reduction(data: pd.DataFrame, n_components=128):
 def one_hot(labels):
     labels_reshaped = np.array(labels).reshape(-1, 1)
 
-    encoder = OneHotEncoder(sparse_output=False)
-    encoder = encoder.fit(labels_reshaped)
-    return encoder
+    encoder = OneHotEncoder(sparse_output=False, handle_unknown='infrequent_if_exist')
+    transformed = encoder.fit_transform(labels_reshaped)
+    return transformed, encoder
 
 # All classes with less than x samples will be reduced into a single class
 def reduce_small_classes(labels, threshold=10):
@@ -220,9 +220,101 @@ def reduce_small_classes(labels, threshold=10):
     
     return np.array(reduced_labels)
 
-def preprocess_data(data_dir='data'):
+# Finds the WAV file with the greatest size and loads it in for fitting preprocessing transformers
+# Removes this file from the base_names list
+# Return the X_train, X_test, y_train, y_test data along with a dict of fitted transformers
+def load_largest_file(path: str, base_names: list): 
+    transformers = {}
+
+    sizes = {}
+    path = path + "/"
+    for i in range(len(base_names)):
+        sizes[i] = os.path.getsize(path + base_names[i] + ".wav")
+
+    # Gets the base name with the largest WAV file, removes it from the list of bases
+    largest_file_idx = max(sizes, key=sizes.get)
+    largest_base = base_names[largest_file_idx]
+    del base_names[largest_file_idx]
+
+    X, y = load_files(path, largest_base)
+
+    #y = reduce_small_classes(y)
+    y, transformers['encoder'] = one_hot(y)
+
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
+
+    # Oversample and augment training dataset
+    X_train, y_train = oversample_dataset(X_train, y_train)
+    X_train, y_train = augment_data(X_train, y_train, 3.)
+
+    # Scale and reduce dimensionality of dataset
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+    
+    pca = PCA(n_components=128)
+    X_train = pca.fit_transform(X_train)
+    X_test = pca.transform(X_test)
+
+    transformers['scaler'] = scaler
+    transformers['pca'] = pca
+
+    # Shuffle training data
+    indices = np.arange(X_train.shape[0])
+    np.random.shuffle(indices)
+
+    X_train = X_train[indices]
+    y_train = y_train[indices]
+
+    print(" Finished.", flush=True)
+
+    return X_train, X_test, y_train, y_test, transformers
+
+
+# Loads in the label and feature files that share base_name at path
+def load_files(path: str, base_name: str) -> np.ndarray | np.ndarray:
+    print(f'Processing {base_name} files...', end='', flush=True)
+    label_file = path + '/' + base_name + '.tsv'
+    audio_file = path + '/' + base_name + '.wav'
+    
+    audio, labels, sr = load_data(label_file, audio_file)
+    segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
+    
+    X = convert_to_array(segmented_audio)
+    y = seg_labels
+
+    return X, y
+
+# Transforms features and labels using the fitted transformers
+def transform_data(features, labels, transformers: dict):
+    y = transformers['encoder'].transform(np.array(labels).reshape(-1, 1))
+
+    X_train, X_test, y_train, y_test = train_test_split(features, y, test_size=0.2, random_state=1)
+
+    # Oversample and augment training dataset
+    X_train, y_train = oversample_dataset(X_train, y_train)
+    X_train, y_train = augment_data(X_train, y_train, 3.)
+
+    # Scale and reduce dimensionality of dataset
+    X_train = transformers['scaler'].transform(X_train)
+    X_test = transformers['scaler'].transform(X_test)
+    
+    X_train = transformers['pca'].transform(X_train)
+    X_test = transformers['pca'].transform(X_test)
+
+    # Shuffle training data
+    indices = np.arange(X_train.shape[0])
+    np.random.shuffle(indices)
+
+    X_train = X_train[indices]
+    y_train = y_train[indices]
+
+    return X_train, X_test, y_train, y_test
+
+
+def preprocess_data(data_dir='data/'):
     base_names = []
-    extensions = ['.txt', '.wav']
+    extensions = ['.tsv', '.wav']
     filenames = os.listdir(data_dir)
 
     for file in filenames:
@@ -231,31 +323,23 @@ def preprocess_data(data_dir='data'):
         if ext in extensions and base not in base_names:
             base_names.append(base)
 
-    # loads the data from every pair of txt and wav files in the data_dir    
-    dataframe = pd.DataFrame()
+    # Loads largest file and fits transformers with it
+    X_train, X_test, y_train, y_test, transformers = load_largest_file(data_dir, base_names)
 
+    # Loads and processes the rest of the files with the fitted transformers
     for base in base_names:
-        print(f'Processing {base} file(s)...', end='', flush=True)
-        label_file = data_dir + '/' + base + '.tsv'
-        audio_file = data_dir + '/' + base + '.wav'
+        X, y = load_files(data_dir, base)
+        X_train_new, X_test_new, y_train_new, y_test_new = transform_data(X, y, transformers)
 
-        audio, labels, sr = load_data(label_file, audio_file)
-        segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
+        # Add new data to dataset
+        X_train = np.concat((X_train, X_train_new), axis=0)
+        y_train = np.concat((y_train, y_train_new), axis=0)
+        X_test = np.concat((X_test, X_test_new), axis=0)
+        y_test = np.concat((y_test, y_test_new), axis=0)
 
-        key_df = pd.DataFrame(convert_to_array(segmented_audio))
-        key_df['label'] = seg_labels
-
-        dataframe = pd.concat([dataframe, key_df], ignore_index=True)
-        
         print(" Finished.", flush=True)
 
-    features = np.array(dataframe.drop('label', axis=1))
-    labels = np.array(dataframe['label'])
-    labels = reduce_small_classes(labels)
-
-    ohe = one_hot(labels)
-
-    return features, labels, {'encoder': ohe}
+    return X_train, X_test, y_train, y_test, transformers
 
 
 def main():
