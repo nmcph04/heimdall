@@ -7,7 +7,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.decomposition import PCA
 import librosa
-import torch
 from deep_learning_functions import oversample_dataset, augment_data
 
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
@@ -168,7 +167,7 @@ def extract_features(keystroke, n_fft):
     D = librosa.stft(keystroke, n_fft=n_fft)
     S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
     spectrogram = (S_db - np.min(S_db)) / (np.max(S_db) - np.min(S_db))
-    return spectrogram.flatten()
+    return spectrogram
 
 
 def convert_to_array(list_of_keys: list, n_fft=512):
@@ -243,22 +242,6 @@ def load_largest_file(path: str, base_names: list):
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
 
-    # Oversample and augment training dataset
-    X_train, y_train = oversample_dataset(X_train, y_train)
-    X_train, y_train = augment_data(X_train, y_train, 4.)
-
-    # Scale and reduce dimensionality of dataset
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-    
-    pca = PCA(n_components=128)
-    X_train = pca.fit_transform(X_train)
-    X_test = pca.transform(X_test)
-
-    transformers['scaler'] = scaler
-    transformers['pca'] = pca
-
     # Shuffle training data
     indices = np.arange(X_train.shape[0])
     np.random.shuffle(indices)
@@ -290,17 +273,6 @@ def transform_data(features, labels, transformers: dict):
     y = transformers['encoder'].transform(np.array(labels).reshape(-1, 1))
 
     X_train, X_test, y_train, y_test = train_test_split(features, y, test_size=0.2, random_state=1)
-
-    # Oversample and augment training dataset
-    X_train, y_train = oversample_dataset(X_train, y_train)
-    X_train, y_train = augment_data(X_train, y_train, 6.)
-
-    # Scale and reduce dimensionality of dataset
-    X_train = transformers['scaler'].transform(X_train)
-    X_test = transformers['scaler'].transform(X_test)
-    
-    X_train = transformers['pca'].transform(X_train)
-    X_test = transformers['pca'].transform(X_test)
 
     # Shuffle training data
     indices = np.arange(X_train.shape[0])
@@ -339,6 +311,8 @@ def preprocess_data(data_dir='data/'):
         y_test = np.concat((y_test, y_test_new), axis=0)
 
         print(" Finished.", flush=True)
+
+    X_train, y_train = oversample_dataset(X_train, y_train)
 
     return X_train, X_test, y_train, y_test, transformers
 

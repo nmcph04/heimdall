@@ -1,10 +1,14 @@
 import numpy as np
 import torch
-from deep_learning_functions import load_model, load_transformers, transform_data, emulate_typing
+from deep_learning_functions import load_model, load_transformers, emulate_typing
 from preprocess_data import load_data, convert_to_array, naive_segmentation
+from models import CustomDataset
+from torch.utils.data import DataLoader
 
 # Filters predictions so that one character isn't predicted more than twice in a row
-def filter_predictions(pred: str) -> list:
+def filter_predictions(pred: np.ndarray) -> list:
+    if np.ndim(pred) == 0:
+        return []
     filtered = []
     count = 1
     last_key = ''
@@ -50,7 +54,6 @@ def analyze_audio(audio_file: str, models_path='model_data/'):
 
     # Modify and transform the segmented audio
     X = convert_to_array(X)
-    X, _ = transform_data(X, None, transformers)
 
     print(" Done!", flush=True)
 
@@ -58,16 +61,25 @@ def analyze_audio(audio_file: str, models_path='model_data/'):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Predicting keystrokes in audio file '{audio_file}' using device {device}")
 
-    predictions = classifier(torch.tensor(X.astype(np.float32)).to(device)).cpu().detach().numpy()
+    X = torch.tensor(X.astype(np.float32)).to(device)
+    X = X.view(-1, 1, *X.shape[1:])
 
-    predictions = filter_by_confidence(predictions, 0.9)
+    # Batch the segmented audio for prediction
+    seg_dataset = CustomDataset(X)
+    seg_dataloader = DataLoader(seg_dataset, batch_size=16, shuffle=False)
 
-    pred_y = transformers['encoder'].inverse_transform(predictions).squeeze()
-    pred_y = filter_predictions(pred_y)
+    pred_y = np.array([])
+    for data in seg_dataloader:
+        predictions = classifier(data).cpu().detach().numpy()
+
+        predictions = filter_by_confidence(predictions, 0.9)
+
+        if predictions:
+            transformed_pred = transformers['encoder'].inverse_transform(predictions).squeeze()
+            pred_y = np.concat((pred_y, filter_predictions(transformed_pred)), axis=0)
 
     print("Predicted:\n\t", end="")
     emulate_typing(pred_y)
-    print(len(pred_y))
 
 
 def main():

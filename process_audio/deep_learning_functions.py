@@ -9,10 +9,13 @@ from models import ClassificationModel
 
 
 def oversample_dataset(features, labels):
-    # Gets number of unique label elements
-    label_shape = labels.shape[1]
+    num_samples, height, width = features.shape
+    
+    # Flatten the data
+    flattened = features.reshape(num_samples, height * width)
 
     # Converts labels to integers for SMOTE to process
+    label_shape = labels.shape[1]
     encoded_labels = list(int(np.argmax(x)) for x in labels)
 
     # Uses random oversampling so that all classes have at least 10 samples
@@ -22,11 +25,14 @@ def oversample_dataset(features, labels):
         at_least_ten[int(k)] = max(10, int(v))
 
     ros = RandomOverSampler(sampling_strategy=at_least_ten)
-    over_X, over_y = ros.fit_resample(features, encoded_labels)
+    over_X, over_y = ros.fit_resample(flattened, encoded_labels)
 
     # Uses SMOTE to finish the oversampling
     smote = SMOTE(sampling_strategy='not majority')
     over_X, over_y = smote.fit_resample(over_X, over_y)
+
+    # Reshape the oversampled features back to image shape
+    over_X = over_X.reshape(-1, height, width)
 
     # Convert integer labels back into class names
     zero_array = np.zeros((len(over_y), label_shape))
@@ -146,40 +152,19 @@ def dump_transformers(transformers: dict, dir=''):
 
 def read_model_info(path='model_data/'):
     with open(path + 'model_info.txt', 'r') as file:
-        input_layer = int(file.readline().strip())
+        input_layer = [int(x) for x in file.readline().strip().split(',') if x.strip()]
         hidden_layers = [int(x) for x in file.readline().strip().split(',') if x.strip()]
         output_layer = int(file.readline().strip())
     
     return input_layer, hidden_layers, output_layer 
 
-def feature_pipeline(transformers, features):
-    scaled = transformers['scaler'].transform(features)
-    return transformers['pca'].transform(scaled)
-
 def label_ohe(encoder, labels):
     return encoder.transform(labels.reshape(-1, 1))
 
-def transform_data(X, y, transformers: dict):
-    features = feature_pipeline(transformers, X)
-    labels = None
-    if y:
-        labels = label_ohe(transformers['encoder'], np.array(y))
-
-    return features, labels
-
 # Load data transformers
 def load_transformers(dir='model_data/transformer_dumps/'):
-    encoder = None
-    try:
-        encoder = load(open(dir + 'encoder.pkl', 'rb'))
-    except:
-        pass
-    scaler = load(open(dir + 'scaler.pkl', 'rb'))
-    pca = load(open(dir + 'pca.pkl', 'rb'))
-    if encoder: 
-        return {'encoder': encoder, 'scaler': scaler, 'pca': pca}
-    else:
-        return {'scaler': scaler, 'pca': pca}
+    encoder = load(open(dir + 'encoder.pkl', 'rb'))
+    return {'encoder': encoder}
 
 # path is the directory that has the model directory within it
 def load_model(path='model_data/'):
