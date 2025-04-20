@@ -9,10 +9,8 @@ from models import ClassificationModel
 
 
 def oversample_dataset(features, labels):
-    num_samples, height, width = features.shape
-    
-    # Flatten the data
-    flattened = features.reshape(num_samples, height * width)
+    features = np.array(features)
+    labels = np.array(labels)
 
     # Converts labels to integers for SMOTE to process
     label_shape = labels.shape[1]
@@ -25,14 +23,11 @@ def oversample_dataset(features, labels):
         at_least_ten[int(k)] = max(10, int(v))
 
     ros = RandomOverSampler(sampling_strategy=at_least_ten)
-    over_X, over_y = ros.fit_resample(flattened, encoded_labels)
+    over_X, over_y = ros.fit_resample(features, encoded_labels)
 
     # Uses SMOTE to finish the oversampling
     smote = SMOTE(sampling_strategy='not majority')
     over_X, over_y = smote.fit_resample(over_X, over_y)
-
-    # Reshape the oversampled features back to image shape
-    over_X = over_X.reshape(-1, height, width)
 
     # Convert integer labels back into class names
     zero_array = np.zeros((len(over_y), label_shape))
@@ -41,7 +36,7 @@ def oversample_dataset(features, labels):
 
     return over_X, zero_array
 
-def time_stretch(audio, stretch_factor, target_length=17733):
+def time_stretch(audio, stretch_factor, target_length=8820):
     if stretch_factor <= 0:
         raise ValueError("Stretch factor must be greater than 0")
     
@@ -53,7 +48,7 @@ def time_stretch(audio, stretch_factor, target_length=17733):
     return resized_audio
 
 
-def pitch_shift(audio, n_steps, sample_rate=44100, target_length=17733):
+def pitch_shift(audio, n_steps, sample_rate=44100, target_length=8820):
     if sample_rate <= 0:
         raise ValueError("Sample rate must be positive")
     
@@ -131,7 +126,10 @@ def getAcc(pred_y: torch.Tensor, true_y: torch.Tensor):
 def write_model_info(input_layer, hidden_layers, output_layer, dir=''):
     path = dir + 'model_info.txt'
     file = open(path, 'x')
-    file.write(str(input_layer) + '\n')
+    for shape in input_layer:
+        file.write(str(shape) + ',')
+    
+    file.write('\n')
 
     for layer in hidden_layers:
         file.write(str(layer) + ',')

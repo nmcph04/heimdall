@@ -65,6 +65,7 @@ class ClassificationModel(torch.nn.Module):
 
 class CustomDataset(Dataset):
     def __init__(self, features, labels=None):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.features = features
         self.labels = labels
     
@@ -72,7 +73,4 @@ class CustomDataset(Dataset):
         return len(self.features)
 
     def __getitem__(self, index):
-        if self.labels:
-            return self.features[index], self.labels[index]
-        else:
-            return self.features[index]
+        return self.features[index].to(self.device), self.labels[index].to(self.device)

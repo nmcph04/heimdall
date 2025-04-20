@@ -48,17 +48,17 @@ def train_model(data_dir='data', epochs=20, return_model=True, save_model=True, 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Convert datasets to tensors
-    X_train = torch.tensor(X_train.astype(np.float32)).to(device)
-    y_train = torch.tensor(y_train.astype(np.float32)).to(device)
-    X_test = torch.from_numpy(X_test.astype(np.float32)).to(device)
-    y_test = torch.from_numpy(y_test.astype(np.float32)).to(device)
+    X_train = torch.tensor(X_train.astype(np.float32))
+    y_train = torch.tensor(y_train.astype(np.float32))
+    X_test = torch.from_numpy(X_test.astype(np.float32))
+    y_test = torch.from_numpy(y_test.astype(np.float32))
 
     X_train = X_train.view(-1, 1, *X_train.shape[1:])
     X_test = X_test.view(-1, *X_train.shape[1:])
     train_dataset = CustomDataset(X_train, y_train)
     test_dataset = CustomDataset(X_test, y_test)
 
-    input_shape = X_train.shape[1:]
+    input_shape = list(X_train.shape[1:])
     output_size = y_train.shape[1]
     hidden_sizes = [512, 512, 256] # Hidden layer sizes
 

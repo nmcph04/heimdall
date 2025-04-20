@@ -240,14 +240,7 @@ def load_largest_file(path: str, base_names: list):
     #y = reduce_small_classes(y)
     y, transformers['encoder'] = one_hot(y)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
-
-    # Shuffle training data
-    indices = np.arange(X_train.shape[0])
-    np.random.shuffle(indices)
-
-    X_train = X_train[indices]
-    y_train = y_train[indices]
+    X_train, X_test, y_train, y_test = transform_data(X, y, None)
 
     print(" Finished.", flush=True)
 
@@ -263,16 +256,27 @@ def load_files(path: str, base_name: str) -> np.ndarray | np.ndarray:
     audio, labels, sr = load_data(label_file, audio_file)
     segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
     
-    X = convert_to_array(segmented_audio)
+    X = segmented_audio
     y = seg_labels
 
     return X, y
 
-# Transforms features and labels using the fitted transformers
+# Oversamples and augments data, encodes labels, splits data and shuffles it
 def transform_data(features, labels, transformers: dict):
-    y = transformers['encoder'].transform(np.array(labels).reshape(-1, 1))
+    if transformers:
+        y = transformers['encoder'].transform(np.array(labels).reshape(-1, 1))
+    else:
+        y = labels
 
     X_train, X_test, y_train, y_test = train_test_split(features, y, test_size=0.2, random_state=1)
+
+    # Oversample and augment data
+    X_train, y_train = oversample_dataset(X_train, y_train)
+    X_train, y_train = augment_data(X_train, y_train, 2.)
+
+    # Convert raw audio to spectrograms
+    X_train = convert_to_array(X_train)
+    X_test = convert_to_array(X_test)
 
     # Shuffle training data
     indices = np.arange(X_train.shape[0])
@@ -311,8 +315,6 @@ def preprocess_data(data_dir='data/'):
         y_test = np.concat((y_test, y_test_new), axis=0)
 
         print(" Finished.", flush=True)
-
-    X_train, y_train = oversample_dataset(X_train, y_train)
 
     return X_train, X_test, y_train, y_test, transformers
 

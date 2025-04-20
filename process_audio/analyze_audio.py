@@ -2,8 +2,18 @@ import numpy as np
 import torch
 from deep_learning_functions import load_model, load_transformers, emulate_typing
 from preprocess_data import load_data, convert_to_array, naive_segmentation
-from models import CustomDataset
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
+
+class CustomDataset(Dataset):
+    def __init__(self, features):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.features = features
+    
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, index):
+        return self.features[index].to(self.device)
 
 # Filters predictions so that one character isn't predicted more than twice in a row
 def filter_predictions(pred: np.ndarray) -> list:
@@ -61,7 +71,7 @@ def analyze_audio(audio_file: str, models_path='model_data/'):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Predicting keystrokes in audio file '{audio_file}' using device {device}")
 
-    X = torch.tensor(X.astype(np.float32)).to(device)
+    X = torch.tensor(X.astype(np.float32))
     X = X.view(-1, 1, *X.shape[1:])
 
     # Batch the segmented audio for prediction
