@@ -54,8 +54,6 @@ def analyze_audio(audio_file: str, models_path='model_data/'):
     # Load audio
     audio, _, sr = load_data(label_file=None, audio_file=audio_file)
 
-    audio = audio[:5000000]
-
     print(' Done!', flush=True)
 
     # Segment audio using naive segmentation
