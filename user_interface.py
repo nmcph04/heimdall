@@ -56,6 +56,25 @@ def str_to_bool(text: str) -> bool:
         print("boolean setting is not 'true' or 'false'. Defaulting to True.")
         return True
 
+def save_hist_graph(data):
+    import seaborn as sns
+    import matplotlib.pyplot as plt
+
+    plt.subplot(2, 1, 1)
+    plt.title("Model Loss")
+    sns.lineplot(x='epoch', y='train_loss', data=data)
+    sns.lineplot(x='epoch', y='val_loss', data=data)
+    plt.legend(labels=['train_loss', 'val_loss'])
+
+    plt.subplot(2, 1, 2)
+    plt.title("Model Accuracy")
+    sns.lineplot(x='epoch', y='train_acc', data=data)
+    sns.lineplot(x='epoch', y='val_acc', data=data)
+    plt.legend(labels=['train_acc', 'val_acc'])
+
+    plt.tight_layout()
+    plt.savefig("model_hist.png")
+
 def ui_train(settings: dict):
     clear_screen()
     print(f"{"Heimdall Training" :^{UI_WIDTH}}")
@@ -63,7 +82,7 @@ def ui_train(settings: dict):
     # Confirm settings, data paths, etc. Then run the classifier training
     print(f"{"Confirm the following settings:" :^{UI_WIDTH}}")
     
-    training_settings = ['modelPath', 'confirmDirectoryDeletion', 'trainingDataPath', 'trainingForcePreprocessing', 'trainingSaveModel']
+    training_settings = ['modelPath', 'confirmDirectoryDeletion', 'trainingDataPath', 'trainingForcePreprocessing', 'trainingSaveModel', 'trainingSaveHistory']
     for setting in training_settings:
         print(' '*9, f"{setting}: {settings[setting]}")
     
@@ -74,13 +93,17 @@ def ui_train(settings: dict):
         time.sleep(1)
         return
     
+    settings['trainingSaveHistory'] = str_to_bool(settings['trainingSaveHistory'])
     settings['trainingSaveModel'] = str_to_bool(settings['trainingSaveModel'])
     settings['trainingForcePreprocessing'] = str_to_bool(settings['trainingForcePreprocessing'])
     
     print("Training classification model...")
 
-    train_model(data_dir=settings['trainingDataPath'], return_model=False, save_dir=settings['modelPath'], save_model=settings['trainingSaveModel'],
+    hist = train_model(data_dir=settings['trainingDataPath'], return_model=settings['trainingSaveHistory'], save_dir=settings['modelPath'], save_model=settings['trainingSaveModel'],
                 force_preprocess=settings['trainingForcePreprocessing'])
+    
+    if settings['trainingSaveHistory']:
+        save_hist_graph(hist)
     
     input("Model training complete! Press enter to continue: ")
     return

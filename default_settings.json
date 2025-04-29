@@ -4,5 +4,6 @@
 	"analysisDataPath":"test.wav",
 	"confirmDirectoryDeletion":"True",
 	"trainingForcePreprocessing":"False",
-	"trainingSaveModel":"True"
+	"trainingSaveModel":"True",
+	"trainingSaveHistory":"True"
 }
