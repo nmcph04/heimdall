@@ -75,10 +75,12 @@ def ui_train(settings: dict):
         return
     
     settings['trainingSaveModel'] = str_to_bool(settings['trainingSaveModel'])
+    settings['trainingForcePreprocessing'] = str_to_bool(settings['trainingForcePreprocessing'])
     
     print("Training classification model...")
 
-    train_model(data_dir=settings['trainingDataPath'], return_model=False, save_dir=settings['modelPath'], save_model=settings['trainingSaveModel'])
+    train_model(data_dir=settings['trainingDataPath'], return_model=False, save_dir=settings['modelPath'], save_model=settings['trainingSaveModel'],
+                force_preprocess=settings['trainingForcePreprocessing'])
     
     input("Model training complete! Press enter to continue: ")
     return

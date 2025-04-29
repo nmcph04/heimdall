@@ -50,10 +50,10 @@ def train_model(data_dir='data', epochs=10, batch_size=256, return_model=True, s
         transformers = preprocess_data(data_dir=data_dir, del_img_dir=True)
     else:
         transformers = load_transformers(data_dir + "/imgs/")
-    print("Data loading complete!")
 
     train_dataset = CustomDataset(data_dir, annotation_file="train.csv", encoder=transformers['encoder'])
     test_dataset = CustomDataset(data_dir, annotation_file="test.csv", encoder=transformers['encoder'])
+    print("Data loading complete!")
     
     # Uses GPU if available, otherwise uses CPU
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
