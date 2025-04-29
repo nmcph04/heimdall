@@ -20,21 +20,23 @@ class EarlyStopping():
     
     # Increments curr_patience if the current loss is less than the mean of the previous epochs in range
     def step(self, history: list, curr_epoch: int):
-        if curr_epoch < self.n_epochs-1:
+        if curr_epoch < self.n_epochs + 1:
             self.curr_patience = 0
             return
         
         curr_loss = history[curr_epoch]
         past_loss = history[(curr_epoch - self.n_epochs-1):curr_epoch+1]
-        print(curr_loss, past_loss)
         if curr_loss >= np.mean(past_loss):
             self.curr_patience += 1
         else:
             self.curr_patience = 0
         return
 
+def checkpoint_model(model, save_dir: str):
+        # Save model state dict to file
+        torch.save(model.state_dict(), f'{save_dir}/model.pt')
 
-def train_model(data_dir='data', epochs=2, batch_size=256, return_model=True, save_model=True, save_dir='model_data/', delete_existing_model=True, force_preprocess=True):
+def train_model(data_dir='data', epochs=15, batch_size=256, return_model=True, save_model=True, save_dir='model_data/', delete_existing_model=True, force_preprocess=True):
 
     # Deletes model_data directory
     if save_model and delete_existing_model and os.path.exists(save_dir):
@@ -82,6 +84,19 @@ def train_model(data_dir='data', epochs=2, batch_size=256, return_model=True, sa
 
     early_stop = EarlyStopping(patience=2, n_epochs=3)
 
+    if save_model:
+        # Delete directory and make a new one
+        rmtree(save_dir)
+        print('Directory deleted')
+        os.makedirs(save_dir)
+
+        # Save transformer models
+        dump_transformers(transformers, dir=save_dir)
+
+        # Save model layer sizes to file
+        write_model_info(input_shape, hidden_sizes, output_size, dir=save_dir)
+
+    best_val_loss = 999
     for epoch in range(epochs):
         tr_loss_sum = 0.
         tr_acc_sum = 0.
@@ -137,37 +152,26 @@ def train_model(data_dir='data', epochs=2, batch_size=256, return_model=True, sa
         val_loss[epoch] = te_loss
         train_acc[epoch] = tr_acc
         val_acc[epoch] = te_acc
-        final_acc = int(te_acc * 100)
 
-        #early_stop.step(val_loss, epoch)
+        early_stop.step(val_loss, epoch)
         
         #if (epoch+1) % 10 == 0 or epoch == 0:
-        print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - train acc: {tr_acc * 100:.2f}% - val loss: {te_loss :.4f} - val acc: {te_acc * 100:.2f}%')
-        
+        print(f'Epoch {epoch+1} - train loss: {tr_loss :.4f} - train acc: {tr_acc * 100:.2f}% - val loss: {te_loss :.4f} - val acc: {te_acc * 100:.2f}%', end='')
+
+        # Saves the model when the test loss improves
+        if save_model and te_loss < best_val_loss:
+            checkpoint_model(model, save_dir)
+            print(" - saved", end='')
+            best_val_loss = te_loss
+        print('')
+
         # If there has been no improvement for at least 'patience' epochs
-        #if early_stop.over_patience():
-        #    print(f"Stopping early at epoch {epoch+1} with a validation accuracy of {final_acc}%...")
-        #    break
-
-    if save_model:
-        # Delete directory and make a new one
-        rmtree(save_dir)
-        print('Directory deleted')
-        os.makedirs(save_dir)
-
-        # Save transformer models
-        dump_transformers(transformers, dir=save_dir)
-
-        # Save model layer sizes to file
-        write_model_info(input_shape, hidden_sizes, output_size, dir=save_dir)
-
-        # Save model state dict to file
-        torch.save(model.state_dict(), f'{save_dir}/model.pt')
-        print(f"Successfully saved model with a validation accuracy of {final_acc}%.")
+        if early_stop.over_patience():
+            print(f"Stopping early at epoch {epoch+1}...")
+            break
 
     trainhist = pd.DataFrame({'train_loss': train_loss, 'train_acc': train_acc,
             'val_loss': val_loss, 'val_acc': val_acc, 'epoch': np.arange(epochs)})
-    trainhist.to_csv('test.csv')
 
     if save_model:
         trainhist.to_csv(save_dir + 'trainhist.csv')
