@@ -9,10 +9,11 @@ from models import ClassificationModel
 
 
 def oversample_dataset(features, labels):
-    # Gets number of unique label elements
-    label_shape = labels.shape[1]
+    features = np.array(features)
+    labels = np.array(labels)
 
     # Converts labels to integers for SMOTE to process
+    label_shape = labels.shape[1]
     encoded_labels = list(int(np.argmax(x)) for x in labels)
 
     # Uses random oversampling so that all classes have at least 10 samples
@@ -35,7 +36,7 @@ def oversample_dataset(features, labels):
 
     return over_X, zero_array
 
-def time_stretch(audio, stretch_factor, target_length=17733):
+def time_stretch(audio, stretch_factor, target_length=8820):
     if stretch_factor <= 0:
         raise ValueError("Stretch factor must be greater than 0")
     
@@ -47,7 +48,7 @@ def time_stretch(audio, stretch_factor, target_length=17733):
     return resized_audio
 
 
-def pitch_shift(audio, n_steps, sample_rate=44100, target_length=17733):
+def pitch_shift(audio, n_steps, sample_rate=44100, target_length=8820):
     if sample_rate <= 0:
         raise ValueError("Sample rate must be positive")
     
@@ -125,7 +126,10 @@ def getAcc(pred_y: torch.Tensor, true_y: torch.Tensor):
 def write_model_info(input_layer, hidden_layers, output_layer, dir=''):
     path = dir + 'model_info.txt'
     file = open(path, 'x')
-    file.write(str(input_layer) + '\n')
+    for shape in input_layer:
+        file.write(str(shape) + ',')
+    
+    file.write('\n')
 
     for layer in hidden_layers:
         file.write(str(layer) + ',')
@@ -146,40 +150,19 @@ def dump_transformers(transformers: dict, dir=''):
 
 def read_model_info(path='model_data/'):
     with open(path + 'model_info.txt', 'r') as file:
-        input_layer = int(file.readline().strip())
+        input_layer = [int(x) for x in file.readline().strip().split(',') if x.strip()]
         hidden_layers = [int(x) for x in file.readline().strip().split(',') if x.strip()]
         output_layer = int(file.readline().strip())
     
     return input_layer, hidden_layers, output_layer 
 
-def feature_pipeline(transformers, features):
-    scaled = transformers['scaler'].transform(features)
-    return transformers['pca'].transform(scaled)
-
 def label_ohe(encoder, labels):
     return encoder.transform(labels.reshape(-1, 1))
 
-def transform_data(X, y, transformers: dict):
-    features = feature_pipeline(transformers, X)
-    labels = None
-    if y:
-        labels = label_ohe(transformers['encoder'], np.array(y))
-
-    return features, labels
-
 # Load data transformers
 def load_transformers(dir='model_data/transformer_dumps/'):
-    encoder = None
-    try:
-        encoder = load(open(dir + 'encoder.pkl', 'rb'))
-    except:
-        pass
-    scaler = load(open(dir + 'scaler.pkl', 'rb'))
-    pca = load(open(dir + 'pca.pkl', 'rb'))
-    if encoder: 
-        return {'encoder': encoder, 'scaler': scaler, 'pca': pca}
-    else:
-        return {'scaler': scaler, 'pca': pca}
+    encoder = load(open(dir + 'encoder.pkl', 'rb'))
+    return {'encoder': encoder}
 
 # path is the directory that has the model directory within it
 def load_model(path='model_data/'):

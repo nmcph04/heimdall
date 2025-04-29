@@ -2,13 +2,15 @@ import pandas as pd
 import numpy as np
 import noisereduce as nr
 import os
+from shutil import rmtree
 import re
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.decomposition import PCA
 import librosa
-import torch
 from deep_learning_functions import oversample_dataset, augment_data
+from PIL import Image
+from pickle import dump
 
 # Loads data, reduces noise, extracts features, standardizes, and reduces the dimensionality of the data
 
@@ -17,8 +19,8 @@ SEGMENT_LEN = 0.2 # each segment should be 200ms long
 def load_audio(filename):
     return librosa.load(filename, sr=None)
 
-def reduce_noise(audio, sample_rate, output_file='cleaned.wav'):
-    reduced_noise = nr.reduce_noise(y=audio, sr=sample_rate, prop_decrease=.75)
+def reduce_noise(audio, sample_rate):
+    reduced_noise = nr.reduce_noise(y=audio, sr=sample_rate, prop_decrease=0.5)
     return reduced_noise
 
 # Convert shifted characters (!, @, etc.) to unshifted versions (1, 2, etc)
@@ -167,11 +169,17 @@ def is_quiet(chunk: list, threshold: float) -> bool:
 def extract_features(keystroke, n_fft):
     D = librosa.stft(keystroke, n_fft=n_fft)
     S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
+
+    # Scale data from [0-1]
     spectrogram = (S_db - np.min(S_db)) / (np.max(S_db) - np.min(S_db))
-    return spectrogram.flatten()
+
+    # Scale data to [0,255] so it can be saved as an image
+    spectrogram = (spectrogram * 255).astype(np.uint8)
+
+    return spectrogram
 
 
-def convert_to_array(list_of_keys: list, n_fft=512):
+def convert_to_array(list_of_keys: list, n_fft=256):
     list_of_arrays = []
     for key in list_of_keys:
         key_array = np.array(key)
@@ -220,6 +228,34 @@ def reduce_small_classes(labels, threshold=10):
     
     return np.array(reduced_labels)
 
+# Saves the images to directory at path/category/base_name and returns a DataFrame mapping file names to labels
+# Category should be either 'train' or 'test'
+def save_images(features: np.ndarray, labels: np.ndarray, path: str, base_name: str, category: str) -> pd.DataFrame:
+    if category not in ['train', 'test']:
+        raise ValueError
+
+    path = path + "/imgs/"
+    if not os.path.exists(path):
+        os.mkdir(path)
+    
+    path = path + category + "/"
+    if not os.path.exists(path):
+        os.mkdir(path)
+
+    dir_path = path + base_name + "/"
+    if not os.path.exists(dir_path):
+        os.mkdir(dir_path)
+
+    map_df = pd.DataFrame(columns=['img_name', 'label'])
+    i = 1
+    for X, y in zip(features, labels):
+        curr_filename = dir_path + f"{i :06d}" + ".jpeg"
+        if y[0] is not None:
+            Image.fromarray(X).save(curr_filename)
+            map_df.loc[len(map_df)] = [curr_filename, y[0]]
+        i += 1
+    return map_df
+
 # Finds the WAV file with the greatest size and loads it in for fitting preprocessing transformers
 # Removes this file from the base_names list
 # Return the X_train, X_test, y_train, y_test data along with a dict of fitted transformers
@@ -241,34 +277,17 @@ def load_largest_file(path: str, base_names: list):
     #y = reduce_small_classes(y)
     y, transformers['encoder'] = one_hot(y)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
+    X_train, X_test, y_train, y_test = transform_data(X, y, None)
 
-    # Oversample and augment training dataset
-    X_train, y_train = oversample_dataset(X_train, y_train)
-    X_train, y_train = augment_data(X_train, y_train, 4.)
+    y_train = transformers['encoder'].inverse_transform(y_train)
+    y_test = transformers['encoder'].inverse_transform(y_test)
 
-    # Scale and reduce dimensionality of dataset
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-    
-    pca = PCA(n_components=128)
-    X_train = pca.fit_transform(X_train)
-    X_test = pca.transform(X_test)
-
-    transformers['scaler'] = scaler
-    transformers['pca'] = pca
-
-    # Shuffle training data
-    indices = np.arange(X_train.shape[0])
-    np.random.shuffle(indices)
-
-    X_train = X_train[indices]
-    y_train = y_train[indices]
+    train_df = save_images(X_train, y_train, path=path, base_name=largest_base, category='train')
+    test_df = save_images(X_test, y_test, path=path, base_name=largest_base, category='test')
 
     print(" Finished.", flush=True)
 
-    return X_train, X_test, y_train, y_test, transformers
+    return train_df, test_df, transformers
 
 
 # Loads in the label and feature files that share base_name at path
@@ -280,27 +299,27 @@ def load_files(path: str, base_name: str) -> np.ndarray | np.ndarray:
     audio, labels, sr = load_data(label_file, audio_file)
     segmented_audio, seg_labels = labeled_audio_segmentation(labels, audio, sr)
     
-    X = convert_to_array(segmented_audio)
+    X = segmented_audio
     y = seg_labels
 
     return X, y
 
-# Transforms features and labels using the fitted transformers
+# encodes labels, converts data to spectrograms and shuffles it
 def transform_data(features, labels, transformers: dict):
-    y = transformers['encoder'].transform(np.array(labels).reshape(-1, 1))
+    if transformers:
+        y = transformers['encoder'].transform(np.array(labels).reshape(-1, 1))
+    else:
+        y = labels
 
     X_train, X_test, y_train, y_test = train_test_split(features, y, test_size=0.2, random_state=1)
 
-    # Oversample and augment training dataset
+    # Oversample and augment data
     X_train, y_train = oversample_dataset(X_train, y_train)
-    X_train, y_train = augment_data(X_train, y_train, 6.)
+    #X_train, y_train = augment_data(X_train, y_train, 3.)
 
-    # Scale and reduce dimensionality of dataset
-    X_train = transformers['scaler'].transform(X_train)
-    X_test = transformers['scaler'].transform(X_test)
-    
-    X_train = transformers['pca'].transform(X_train)
-    X_test = transformers['pca'].transform(X_test)
+    # Convert raw audio to spectrograms
+    X_train = convert_to_array(X_train)
+    X_test = convert_to_array(X_test)
 
     # Shuffle training data
     indices = np.arange(X_train.shape[0])
@@ -309,10 +328,21 @@ def transform_data(features, labels, transformers: dict):
     X_train = X_train[indices]
     y_train = y_train[indices]
 
+    if transformers:
+        y_train = transformers['encoder'].inverse_transform(y_train)
+        y_test = transformers['encoder'].inverse_transform(y_test)
+
     return X_train, X_test, y_train, y_test
 
 
-def preprocess_data(data_dir='data/'):
+def preprocess_data(data_dir='data/', del_img_dir=False):
+    # Delete an existing image directory
+    if del_img_dir:
+        try:
+            rmtree(data_dir + "/imgs/")
+        except FileNotFoundError:
+            pass
+
     base_names = []
     extensions = ['.tsv', '.wav']
     filenames = os.listdir(data_dir)
@@ -324,23 +354,31 @@ def preprocess_data(data_dir='data/'):
             base_names.append(base)
     base_names.sort()
 
-    # Loads largest file and fits transformers with it
-    X_train, X_test, y_train, y_test, transformers = load_largest_file(data_dir, base_names)
+    # Processes largest file and fits transformers with it
+    train_df, test_df, transformers = load_largest_file(data_dir, base_names)
 
     # Loads and processes the rest of the files with the fitted transformers
     for base in base_names:
         X, y = load_files(data_dir, base)
-        X_train_new, X_test_new, y_train_new, y_test_new = transform_data(X, y, transformers)
+        X_train, X_test, y_train, y_test = transform_data(X, y, transformers)
 
-        # Add new data to dataset
-        X_train = np.concat((X_train, X_train_new), axis=0)
-        y_train = np.concat((y_train, y_train_new), axis=0)
-        X_test = np.concat((X_test, X_test_new), axis=0)
-        y_test = np.concat((y_test, y_test_new), axis=0)
+        train_df_new = save_images(X_train, y_train, path = data_dir, base_name=base, category='train')
+        test_df_new = save_images(X_test, y_test, path = data_dir, base_name=base, category='test')
+        train_df = pd.concat([train_df, train_df_new], ignore_index=True)
+        test_df = pd.concat([test_df, test_df_new], ignore_index=True)
 
         print(" Finished.", flush=True)
+    
+    # Save maps to file
+    train_df.to_csv(data_dir + "/imgs/train.csv", index=False)
+    test_df.to_csv(data_dir + "/imgs/test.csv", index=False)
 
-    return X_train, X_test, y_train, y_test, transformers
+    # Save transformers to file
+    for name, transformer in transformers.items():
+        path = data_dir + "/imgs/" + name + '.pkl'
+        dump(transformer, open(path, 'wb'))
+
+    return transformers
 
 
 def main():
