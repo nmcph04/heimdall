@@ -2,5 +2,8 @@
 	"modelPath":"process_audio/model_data/",
 	"trainingDataPath":"process_audio/data/",
 	"analysisDataPath":"test.wav",
-	"confirmDirectoryDeletion":"True"
+	"confirmDirectoryDeletion":"True",
+	"trainingForcePreprocessing":"False",
+	"trainingSaveModel":"True",
+	"trainingSaveHistory":"True"
 }

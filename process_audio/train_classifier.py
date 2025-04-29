@@ -34,7 +34,7 @@ class EarlyStopping():
         return
 
 
-def train_model(data_dir='data', epochs=10, batch_size=256, return_model=True, save_model=True, save_dir='model_data/', delete_existing_model=True, force_preprocess=True):
+def train_model(data_dir='data', epochs=2, batch_size=256, return_model=True, save_model=True, save_dir='model_data/', delete_existing_model=True, force_preprocess=True):
 
     # Deletes model_data directory
     if save_model and delete_existing_model and os.path.exists(save_dir):
@@ -50,10 +50,10 @@ def train_model(data_dir='data', epochs=10, batch_size=256, return_model=True, s
         transformers = preprocess_data(data_dir=data_dir, del_img_dir=True)
     else:
         transformers = load_transformers(data_dir + "/imgs/")
-    print("Data loading complete!")
 
     train_dataset = CustomDataset(data_dir, annotation_file="train.csv", encoder=transformers['encoder'])
     test_dataset = CustomDataset(data_dir, annotation_file="test.csv", encoder=transformers['encoder'])
+    print("Data loading complete!")
     
     # Uses GPU if available, otherwise uses CPU
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -100,7 +100,7 @@ def train_model(data_dir='data', epochs=10, batch_size=256, return_model=True, s
 
             predictions = torch.argmax(pred, dim=1)
             truth = torch.argmax(y, dim=1)
-            curr_acc = (predictions == truth).float().mean().cpu()
+            curr_acc = (predictions == truth).float().mean().cpu().numpy()
             tr_acc_sum += curr_acc
 
             tr_batch_num += 1
@@ -123,7 +123,7 @@ def train_model(data_dir='data', epochs=10, batch_size=256, return_model=True, s
 
             predictions = torch.argmax(pred, dim=1)
             truth = torch.argmax(y, dim=1)
-            curr_acc = (predictions == truth).float().mean().cpu()
+            curr_acc = (predictions == truth).float().mean().cpu().numpy()
             te_acc_sum += curr_acc
 
             te_batch_num += 1
@@ -167,12 +167,14 @@ def train_model(data_dir='data', epochs=10, batch_size=256, return_model=True, s
 
     trainhist = pd.DataFrame({'train_loss': train_loss, 'train_acc': train_acc,
             'val_loss': val_loss, 'val_acc': val_acc, 'epoch': np.arange(epochs)})
-    
+    trainhist.to_csv('test.csv')
+
     if save_model:
         trainhist.to_csv(save_dir + 'trainhist.csv')
 
     if return_model:
-        return model, trainhist, transformers
+        return trainhist
+        #return model, trainhist, transformers
 
 def main():
     train_model(return_model=False)
